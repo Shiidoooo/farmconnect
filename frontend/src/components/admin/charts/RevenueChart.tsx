@@ -1,87 +1,67 @@
-
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign } from "lucide-react";
-import { format, subDays, subWeeks, subMonths, subYears } from "date-fns";
-
-// Sample data generator for different time periods
-const generateData = (period: string) => {
-  const now = new Date();
-  
-  switch (period) {
-    case "7days":
-      return Array.from({ length: 7 }, (_, i) => {
-        const date = subDays(now, 6 - i);
-        return {
-          label: format(date, "EEE"),
-          revenue: Math.floor(Math.random() * 2000) + 1000,
-          orders: Math.floor(Math.random() * 50) + 20,
-        };
-      });
-    
-    case "30days":
-      return Array.from({ length: 30 }, (_, i) => {
-        const date = subDays(now, 29 - i);
-        return {
-          label: format(date, "MMM dd"),
-          revenue: Math.floor(Math.random() * 3000) + 1500,
-          orders: Math.floor(Math.random() * 80) + 30,
-        };
-      }).filter((_, i) => i % 3 === 0); // Show every 3rd day
-    
-    case "12weeks":
-      return Array.from({ length: 12 }, (_, i) => {
-        const date = subWeeks(now, 11 - i);
-        return {
-          label: `Week ${i + 1}`,
-          revenue: Math.floor(Math.random() * 15000) + 8000,
-          orders: Math.floor(Math.random() * 300) + 150,
-        };
-      });
-    
-    case "12months":
-      return Array.from({ length: 12 }, (_, i) => {
-        const date = subMonths(now, 11 - i);
-        return {
-          label: format(date, "MMM yyyy"),
-          revenue: Math.floor(Math.random() * 50000) + 25000,
-          orders: Math.floor(Math.random() * 1000) + 500,
-        };
-      });
-    
-    case "5years":
-      return Array.from({ length: 5 }, (_, i) => {
-        const date = subYears(now, 4 - i);
-        return {
-          label: format(date, "yyyy"),
-          revenue: Math.floor(Math.random() * 500000) + 300000,
-          orders: Math.floor(Math.random() * 10000) + 5000,
-        };
-      });
-    
-    default:
-      return [];
-  }
-};
+import { TrendingUp, TrendingDown, DollarSign, Loader } from "lucide-react";
+import { useSalesAnalytics } from "../../../hooks/useAdminData";
 
 const RevenueChart = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState("30days");
+  const [period, setPeriod] = useState("monthly");
   const [chartType, setChartType] = useState("line");
   
-  const data = generateData(selectedPeriod);
-  const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
-  const avgRevenue = totalRevenue / data.length;
-  const trend = data.length > 1 ? 
-    ((data[data.length - 1].revenue - data[0].revenue) / data[0].revenue) * 100 : 0;
+  // Use real backend data
+  const { data: salesData, loading, error, refetch } = useSalesAnalytics({ 
+    period: period as 'daily' | 'weekly' | 'monthly' | 'yearly' 
+  });
+
+  // Transform backend data for chart display
+  const transformDataForChart = (rawData: any[]) => {
+    return rawData.map((item) => ({
+      label: formatLabel(item._id, period),
+      revenue: item.revenue,
+      orders: item.orders,
+      averageOrderValue: item.averageOrderValue,
+    }));
+  };
+
+  const formatLabel = (dateString: string, period: string) => {
+    try {
+      switch (period) {
+        case 'daily':
+          return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        case 'weekly':
+          return `Week ${dateString.split('-W')[1] || dateString}`;
+        case 'yearly':
+          return dateString;
+        default: // monthly
+          const date = new Date(dateString + '-01');
+          return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+    } catch {
+      return dateString;
+    }
+  };
+
+  const chartData = salesData ? transformDataForChart(salesData) : [];
+
+  // Calculate growth percentage
+  const calculateGrowth = () => {
+    if (chartData.length < 2) return 0;
+    const current = chartData[chartData.length - 1]?.revenue || 0;
+    const previous = chartData[chartData.length - 2]?.revenue || 0;
+    if (previous === 0) return 0;
+    return ((current - previous) / previous) * 100;
+  };
+
+  const growth = calculateGrowth();
+  const totalRevenue = chartData.reduce((sum, item) => sum + (item.revenue || 0), 0);
+  const avgRevenue = chartData.length > 0 ? totalRevenue / chartData.length : 0;
 
   const periodOptions = [
-    { value: "7days", label: "Last 7 Days" },
-    { value: "30days", label: "Last 30 Days" },
-    { value: "12weeks", label: "Last 12 Weeks" },
-    { value: "12months", label: "Last 12 Months" },
-    { value: "5years", label: "Last 5 Years" },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "monthly", label: "Monthly" },
+    { value: "yearly", label: "Yearly" },
   ];
 
   const chartTypeOptions = [
@@ -92,7 +72,7 @@ const RevenueChart = () => {
 
   const renderChart = () => {
     const commonProps = {
-      data,
+      data: chartData,
       margin: { top: 5, right: 30, left: 20, bottom: 5 },
     };
 
@@ -207,6 +187,39 @@ const RevenueChart = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Revenue Analytics
+            <Loader className="w-4 h-4 animate-spin" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <Loader className="w-8 h-8 animate-spin" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="h-full">
+        <CardHeader>
+          <CardTitle>Revenue Analytics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64 text-red-500">
+            <p>Error loading data: {error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="w-full dark:bg-gray-800 dark:border-gray-700 transition-all duration-200 hover:shadow-lg">
       <CardHeader className="pb-4">
@@ -218,15 +231,15 @@ const RevenueChart = () => {
             </CardTitle>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground">
               <span>Total: ₱{totalRevenue.toLocaleString()}</span>
-              <span>Avg: ${Math.round(avgRevenue).toLocaleString()}</span>
-              <div className={`flex items-center gap-1 ${trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {trend >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                <span>{Math.abs(trend).toFixed(1)}%</span>
+              <span>Avg: ₱{Math.round(avgRevenue).toLocaleString()}</span>
+              <div className={`flex items-center gap-1 ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {growth >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                <span>{Math.abs(growth).toFixed(1)}%</span>
               </div>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 lg:flex-row">
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <Select value={period} onValueChange={setPeriod}>
               <SelectTrigger className="w-full sm:w-[160px] h-9">
                 <SelectValue placeholder="Select period" />
               </SelectTrigger>

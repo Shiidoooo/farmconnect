@@ -3,6 +3,17 @@ const { authenticateUser, authorizeAdmin } = require('../middleware/auth');
 const userController = require('../controllers/userController');
 const orderController = require('../controllers/orderController');
 const productController = require('../controllers/productController');
+const {
+  getDashboardStats,
+  getSalesAnalytics,
+  getProductAnalytics,
+  getCustomerAnalytics,
+  getOrderAnalytics,
+  updateOrderStatus,
+  getAllOrders,
+  getAllProducts,
+  getAllUsers
+} = require('../controllers/adminController');
 
 const router = express.Router();
 
@@ -10,16 +21,30 @@ const router = express.Router();
 router.use(authenticateUser);
 router.use(authorizeAdmin);
 
-// Admin user management routes
+// Dashboard overview
+router.get('/dashboard/stats', getDashboardStats);
+
+// Analytics endpoints
+router.get('/analytics/sales', getSalesAnalytics);
+router.get('/analytics/products', getProductAnalytics);
+router.get('/analytics/customers', getCustomerAnalytics);
+router.get('/analytics/orders', getOrderAnalytics);
+
+// Enhanced admin routes
+router.get('/admin/orders', getAllOrders);
+router.put('/admin/orders/:orderId/status', updateOrderStatus);
+router.get('/admin/products', getAllProducts);
+router.get('/admin/users', getAllUsers);
+
+// Legacy routes for backward compatibility
 router.get('/users', userController.getAllUsers);
 router.get('/users/:id', userController.getUserById);
 router.delete('/users/:id', userController.deleteUser);
 
-// Admin order management routes
-router.get('/orders', orderController.getAllOrders);
-router.put('/orders/:orderId/status', orderController.updateOrderStatus);
+// Use admin controller for orders since orderController.getAllOrders doesn't exist
+router.get('/orders', getAllOrders);
+router.put('/orders/:orderId/status', updateOrderStatus);
 
-// Admin product management routes
 router.get('/products', productController.getAllProducts);
 router.delete('/products/:id', productController.deleteProduct);
 

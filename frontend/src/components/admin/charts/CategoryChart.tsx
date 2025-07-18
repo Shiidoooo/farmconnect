@@ -1,46 +1,84 @@
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useProductAnalytics } from "../../../hooks/useAdminData";
+import { Loader } from "lucide-react";
 
-const chartData = [
-  { name: "Seeds & Seedlings", value: 35, fill: "hsl(var(--chart-1))" },
-  { name: "Garden Tools", value: 28, fill: "hsl(var(--chart-2))" },
-  { name: "Fertilizers", value: 22, fill: "hsl(var(--chart-3))" },
-  { name: "Planters", value: 15, fill: "hsl(var(--chart-4))" },
-];
-
-const chartConfig = {
-  value: {
-    label: "Sales %",
-  },
-};
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 const CategoryChart = () => {
+  const { data: productData, loading, error } = useProductAnalytics();
+
+  if (loading) {
+    return (
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
+        <CardHeader>
+          <CardTitle>Product Categories</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <Loader className="w-6 h-6 animate-spin" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
+        <CardHeader>
+          <CardTitle>Product Categories</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64 text-red-500">
+            Error loading category data: {error}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Transform the product data for the chart - using categories instead of categoryBreakdown
+  const chartData = productData?.categories?.map((item, index) => ({
+    name: item._id || 'Uncategorized',
+    value: item.totalQuantity,
+    revenue: item.revenue,
+    fill: COLORS[index % COLORS.length]
+  })) || [];
+
   return (
     <Card className="dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
-        <CardTitle className="dark:text-white">Sales by Category</CardTitle>
+        <CardTitle>Product Categories</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[250px]">
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={40}
-              outerRadius={80}
-              paddingAngle={5}
-              dataKey="value"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Pie>
-            <ChartTooltip content={<ChartTooltipContent />} />
-          </PieChart>
-        </ChartContainer>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, value }) => `${name}: ${value}`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip 
+                formatter={(value, name, props) => [
+                  `Quantity: ${value}`,
+                  `Revenue: ₱${props.payload.revenue?.toLocaleString()}`
+                ]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
         <div className="mt-4 space-y-2">
           {chartData.map((item) => (
             <div key={item.name} className="flex items-center justify-between text-sm">
@@ -51,7 +89,7 @@ const CategoryChart = () => {
                 />
                 <span className="dark:text-gray-300">{item.name}</span>
               </div>
-              <span className="font-medium dark:text-white">{item.value}%</span>
+              <span className="font-medium dark:text-white">{item.value} units</span>
             </div>
           ))}
         </div>

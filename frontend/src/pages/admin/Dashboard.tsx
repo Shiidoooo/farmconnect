@@ -1,46 +1,70 @@
 import AdminLayout from "@/components/admin/AdminLayout";
 import StatsCard from "@/components/admin/StatsCard";
 import RevenueChart from "@/components/admin/charts/RevenueChart";
+import OrdersChart from "@/components/admin/charts/OrdersChart";
+import CategoryChart from "@/components/admin/charts/CategoryChart";
+import OrderStatusChart from "@/components/admin/charts/OrderStatusChart";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, ShoppingCart, Package, TrendingUp, Activity, Clock, Plus, Eye, UserPlus, Settings } from "lucide-react";
+import { Users, ShoppingCart, Package, TrendingUp, Activity, Clock, Plus, Eye, UserPlus, Settings, Loader } from "lucide-react";
+import { useDashboardStats } from "../../hooks/useAdminData";
 
 const Dashboard = () => {
-  // Sample data for recent activities
+  const { stats, loading, error, refetch } = useDashboardStats();
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center space-y-4">
+            <Loader className="w-8 h-8 animate-spin mx-auto" />
+            <p className="text-muted-foreground">Loading dashboard...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center space-y-4">
+            <div className="text-red-500 text-lg">Error loading dashboard</div>
+            <p className="text-muted-foreground">{error}</p>
+            <button 
+              onClick={refetch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
+  // Get recent activities from backend data
   const recentActivities = [
-    {
-      id: 1,
-      type: "user",
-      message: "New user registered",
-      user: "John Doe",
-      time: "2 minutes ago",
-      status: "success"
-    },
-    {
-      id: 2,
+    // Recent orders
+    ...(stats?.recentOrders?.slice(0, 3).map((order: any, index: number) => ({
+      id: `order-${index}`,
       type: "order",
-      message: "Order #1234 completed",
-      amount: "₱125.99",
-      time: "5 minutes ago",
-      status: "success"
-    },
-    {
-      id: 3,
+      message: `Order #${order._id.slice(-4)} ${order.orderStatus}`,
+      detail: `₱${order.totalAmount?.toLocaleString()}`,
+      time: new Date(order.createdAt).toLocaleDateString(),
+      status: order.orderStatus === 'delivered' ? 'success' : 
+              order.orderStatus === 'pending' ? 'warning' : 'info'
+    })) || []),
+    // Low stock alerts
+    ...(stats?.lowStockProducts?.slice(0, 2).map((product: any, index: number) => ({
+      id: `stock-${index}`,
       type: "product",
-      message: "New product added",
-      product: "Organic Tomato Seeds",
-      time: "1 hour ago",
-      status: "info"
-    },
-    {
-      id: 4,
-      type: "order",
-      message: "Order #1235 pending",
-      amount: "₱89.50",
-      time: "2 hours ago",
+      message: "Low stock alert",
+      detail: product.productName,
+      time: "Recently",
       status: "warning"
-    }
+    })) || [])
   ];
 
   const quickActions = [
@@ -101,39 +125,50 @@ const Dashboard = () => {
     <AdminLayout>
       <div className="space-y-6 w-full max-w-none">
         {/* Header Section */}
-        <div className="space-y-2">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight dark:text-white">
-            Dashboard
-          </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Welcome to your admin dashboard. Here's an overview of your platform.
-          </p>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight dark:text-white">
+              Dashboard
+            </h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Welcome to your admin dashboard. Here's an overview of your platform.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={refetch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            >
+              <Activity className="w-4 h-4" />
+              Refresh Data
+            </button>
+          </div>
         </div>
 
         {/* Stats Cards - Responsive Grid with proper spacing */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
           <StatsCard
             title="Total Users"
-            value="1,234"
-            description="+20.1% from last month"
+            value={stats?.totalUsers?.toLocaleString() || '0'}
+            description="Active customers"
             icon={Users}
           />
           <StatsCard
             title="Orders"
-            value="456"
-            description="+15.2% from last month"
+            value={stats?.totalOrders?.toLocaleString() || '0'}
+            description={`${stats?.todayOrders || 0} today`}
             icon={ShoppingCart}
           />
           <StatsCard
             title="Products"
-            value="89"
-            description="+5.4% from last month"
+            value={stats?.totalProducts?.toLocaleString() || '0'}
+            description={`${stats?.lowStockProducts?.length || 0} low stock`}
             icon={Package}
           />
           <StatsCard
             title="Revenue"
-            value="₱12,345"
-            description="+25.8% from last month"
+            value={`₱${stats?.totalRevenue?.toLocaleString() || '0'}`}
+            description={`₱${stats?.todayRevenue?.toLocaleString() || '0'} today`}
             icon={TrendingUp}
           />
         </div>
@@ -141,6 +176,13 @@ const Dashboard = () => {
         {/* Revenue Chart - Full width with proper spacing */}
         <div className="w-full">
           <RevenueChart />
+        </div>
+
+        {/* Additional Analytics Charts */}
+        <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+          <OrdersChart />
+          <CategoryChart />
+          <OrderStatusChart />
         </div>
 
         {/* Bottom Section - Responsive grid that stacks properly */}
@@ -183,11 +225,11 @@ const Dashboard = () => {
                         </span>
                       </div>
                     </div>
-                    {(activity.user || activity.amount || activity.product) && (
+                    {activity.detail && (
                       <p className="text-xs text-muted-foreground pl-6">
-                        {activity.user && `User: ${activity.user}`}
-                        {activity.amount && `Amount: ${activity.amount}`}
-                        {activity.product && `Product: ${activity.product}`}
+                        {activity.type === 'order' ? `Amount: ${activity.detail}` : 
+                         activity.type === 'product' ? `Product: ${activity.detail}` : 
+                         `Details: ${activity.detail}`}
                       </p>
                     )}
                   </div>

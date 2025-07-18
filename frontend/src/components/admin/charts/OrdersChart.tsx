@@ -1,55 +1,68 @@
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from "recharts";
-
-const chartData = [
-  { day: "Mon", orders: 45, completed: 42 },
-  { day: "Tue", orders: 52, completed: 48 },
-  { day: "Wed", orders: 38, completed: 35 },
-  { day: "Thu", orders: 67, completed: 63 },
-  { day: "Fri", orders: 78, completed: 72 },
-  { day: "Sat", orders: 89, completed: 85 },
-  { day: "Sun", orders: 56, completed: 52 },
-];
-
-const chartConfig = {
-  orders: {
-    label: "Total Orders",
-    color: "hsl(var(--chart-3))",
-  },
-  completed: {
-    label: "Completed Orders",
-    color: "hsl(var(--chart-4))",
-  },
-};
+import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip } from "recharts";
+import { useOrderAnalytics } from "../../../hooks/useAdminData";
+import { Loader } from "lucide-react";
 
 const OrdersChart = () => {
+  const { data: orderData, loading, error } = useOrderAnalytics();
+
+  if (loading) {
+    return (
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
+        <CardHeader>
+          <CardTitle>Orders Analytics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <Loader className="w-6 h-6 animate-spin" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
+        <CardHeader>
+          <CardTitle>Orders Analytics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64 text-red-500">
+            Error loading orders data: {error}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Transform the order data for the chart
+  const chartData = orderData?.orderTrends || [];
+
   return (
     <Card className="dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
-        <CardTitle className="dark:text-white">Weekly Orders</CardTitle>
+        <CardTitle>Orders Analytics</CardTitle>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[200px]">
-          <LineChart data={chartData}>
-            <XAxis dataKey="day" />
-            <YAxis />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Line
-              type="monotone"
-              dataKey="orders"
-              stroke="hsl(var(--chart-3))"
-              strokeWidth={2}
-            />
-            <Line
-              type="monotone"
-              dataKey="completed"
-              stroke="hsl(var(--chart-4))"
-              strokeWidth={2}
-            />
-          </LineChart>
-        </ChartContainer>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="_id" />
+              <YAxis />
+              <Tooltip />
+              <Line 
+                type="monotone" 
+                dataKey="orders" 
+                stroke="#8884d8" 
+                strokeWidth={2}
+                name="Orders"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );
