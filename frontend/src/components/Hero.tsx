@@ -1,10 +1,114 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Leaf, Droplets, Sun, Wind } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { weatherAPI } from "@/services/api";
 import Seed3D from "./Seed3D";
 import WavyBackground from "./WavyBackground";
 import WeatherWidget from "./WeatherWidget";
 
 const Hero = () => {
+  const navigate = useNavigate();
+  const [plantData, setPlantData] = useState({
+    humidity: 65,
+    waterLevel: 450,
+    atmosphere: "Loading...",
+    humidityProgress: 65,
+    waterProgress: 75,
+    atmosphereProgress: 50
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRealTimeData();
+  }, []);
+
+  const fetchRealTimeData = async () => {
+    try {
+      setLoading(true);
+      
+      // Try to get user location, fallback to default
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const response = await weatherAPI.getForecast(
+                position.coords.latitude,
+                position.coords.longitude
+              );
+              if (response.success) {
+                updatePlantData(response.data);
+              }
+            } catch (err) {
+              // Fallback to default location
+              const response = await weatherAPI.getForecast(undefined, undefined, 'Taguig');
+              if (response.success) {
+                updatePlantData(response.data);
+              }
+            }
+          },
+          async () => {
+            // Geolocation failed, use default
+            const response = await weatherAPI.getForecast(undefined, undefined, 'Taguig');
+            if (response.success) {
+              updatePlantData(response.data);
+            }
+          }
+        );
+      } else {
+        // Geolocation not supported, use default
+        const response = await weatherAPI.getForecast(undefined, undefined, 'Taguig');
+        if (response.success) {
+          updatePlantData(response.data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch weather data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePlantData = (weatherData: any) => {
+    const humidity = weatherData.current?.humidity || 65;
+    const temperature = weatherData.current?.temperature || 25;
+    const description = weatherData.current?.description || "Clear";
+    
+    // Calculate optimal water level based on humidity and temperature
+    // Lower humidity = more watering needed, higher temp = more watering needed
+    const baseWaterLevel = 300;
+    const humidityFactor = (100 - humidity) / 100; // Higher when humidity is low
+    const tempFactor = Math.max(0, (temperature - 20) / 20); // Higher when temp > 20°C
+    const waterLevel = Math.round(baseWaterLevel + (humidityFactor * 200) + (tempFactor * 150));
+    
+    // Calculate progress bars
+    const humidityProgress = humidity;
+    const waterProgress = Math.min(100, (waterLevel / 600) * 100);
+    
+    // Determine atmosphere quality based on weather conditions
+    let atmosphereProgress = 50;
+    if (description.toLowerCase().includes('clear') || description.toLowerCase().includes('sunny')) {
+      atmosphereProgress = 90;
+    } else if (description.toLowerCase().includes('cloud')) {
+      atmosphereProgress = 70;
+    } else if (description.toLowerCase().includes('rain')) {
+      atmosphereProgress = 40;
+    }
+
+    setPlantData({
+      humidity,
+      waterLevel,
+      atmosphere: description,
+      humidityProgress,
+      waterProgress,
+      atmosphereProgress
+    });
+  };
+
+  const handleBuyNowClick = () => {
+    navigate('/shop');
+  };
+
   return (
     <section className="relative bg-gradient-to-br from-red-50 via-white to-red-100 overflow-hidden min-h-screen">
       <WavyBackground />
@@ -28,31 +132,49 @@ const Hero = () => {
             <div className="space-y-4 max-w-sm mx-auto lg:mx-0">
               <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-full px-4 py-3 shadow-sm">
                 <Droplets className="w-5 h-5 text-blue-500" />
-                <span className="text-sm font-medium text-gray-700">10% Humidity</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {loading ? "Loading..." : `${plantData.humidity}% Humidity`}
+                </span>
                 <div className="flex-1 bg-gray-200 rounded-full h-2 ml-auto">
-                  <div className="bg-blue-500 h-2 rounded-full w-1/4"></div>
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-1000" 
+                    style={{ width: `${plantData.humidityProgress}%` }}
+                  ></div>
                 </div>
               </div>
               
               <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-full px-4 py-3 shadow-sm">
                 <Droplets className="w-5 h-5 text-blue-600" />
-                <span className="text-sm font-medium text-gray-700">450ml Water level</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {loading ? "Loading..." : `${plantData.waterLevel}ml Water needed`}
+                </span>
                 <div className="flex-1 bg-gray-200 rounded-full h-2 ml-auto">
-                  <div className="bg-blue-600 h-2 rounded-full w-3/4"></div>
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-1000" 
+                    style={{ width: `${plantData.waterProgress}%` }}
+                  ></div>
                 </div>
               </div>
               
               <div className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm rounded-full px-4 py-3 shadow-sm">
                 <Sun className="w-5 h-5 text-yellow-500" />
-                <span className="text-sm font-medium text-gray-700">Sunny Atmosphere</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {loading ? "Loading..." : plantData.atmosphere}
+                </span>
                 <div className="flex-1 bg-gray-200 rounded-full h-2 ml-auto">
-                  <div className="bg-yellow-500 h-2 rounded-full w-4/5"></div>
+                  <div 
+                    className="bg-yellow-500 h-2 rounded-full transition-all duration-1000" 
+                    style={{ width: `${plantData.atmosphereProgress}%` }}
+                  ></div>
                 </div>
               </div>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-lg rounded-full">
+              <Button 
+                onClick={handleBuyNowClick}
+                className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 text-lg rounded-full"
+              >
                 Buy now
               </Button>
             </div>
@@ -79,24 +201,8 @@ const Hero = () => {
               </div>
             </div>
             
-            {/* Side management card */}
-            <div className="absolute bottom-8 right-0 lg:right-8 bg-white/95 backdrop-blur-sm rounded-2xl p-4 shadow-xl max-w-xs z-30">
-              <div className="flex items-center space-x-3 mb-2">
-                <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-full flex items-center justify-center">
-                  <Wind className="w-6 h-6 text-white" />
-                </div>
-                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white rounded-full px-4">
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </div>
-              <h3 className="font-semibold text-gray-800 text-sm mb-1">Manage your home plants</h3>
-              <p className="text-xs text-gray-600 leading-relaxed">
-                Let our smart AI tool help you care for your plants! Find out how much water they need and how much sunlight they can tolerate.
-              </p>
-            </div>
-
             {/* Weather Widget */}
-            <div className="absolute top-8 right-0 lg:right-8 w-64 z-30">
+            <div className="absolute bottom-8 right-0 lg:right-3 w-64 z-30">
               <WeatherWidget />
             </div>
             
