@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { productsAPI } from "@/services/api";
 import { Plus, Edit, Trash2, Package, Calendar, DollarSign, Image, Upload, AlertTriangle } from "lucide-react";
@@ -295,6 +295,9 @@ const MyProductsSection = () => {
               <DialogTitle>
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
               </DialogTitle>
+              <DialogDescription className="text-gray-600">
+                {editingProduct ? 'Update your product information below.' : 'Fill in the details to add a new product to your store.'}
+              </DialogDescription>
             </DialogHeader>
             
             <form onSubmit={handleSubmit} className="space-y-4">

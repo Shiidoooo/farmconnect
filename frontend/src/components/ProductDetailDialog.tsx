@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Star, ShoppingCart, Clock, User, Heart, Share2 } from "lucide-react";
@@ -113,6 +113,9 @@ const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogPr
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-gray-800">{product.productName}</DialogTitle>
+          <DialogDescription className="text-gray-600">
+            View detailed information about this product including images, description, seller info, and customer reviews.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
