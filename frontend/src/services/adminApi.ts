@@ -379,6 +379,8 @@ export interface DashboardStats {
   weeklyRevenue: number;
   monthlyRevenue: number;
   averageOrderValue: number;
+  customerSatisfactionRate?: string;
+  productsByCategory?: { _id: string; count: number }[];
   recentOrders: any[];
   lowStockProducts: any[];
   expiredProducts: any[];
@@ -392,7 +394,7 @@ export interface SalesAnalytics {
 }
 
 export interface ProductAnalytics {
-  categories: {
+  data: {
     _id: string;
     revenue: number;
     orders: number;
@@ -417,12 +419,12 @@ export interface ProductAnalytics {
 }
 
 export interface CustomerAnalytics {
-  totalCustomers: number;
-  newCustomers: number;
-  returningCustomers: number;
-  customerOrderStats: {
-    averageOrdersPerCustomer: number;
-    averageSpentPerCustomer: number;
+  data: {
+    totalCustomers: number;
+    newCustomers: number;
+    returningCustomers: number;
+    averageOrderValue: number;
+    satisfactionRate: string;
   };
   geographicData: {
     _id: string;
@@ -432,6 +434,11 @@ export interface CustomerAnalytics {
 }
 
 export interface OrderAnalytics {
+  data: {
+    _id: string;
+    orders: number;
+    revenue: number;
+  }[];
   orderStatusDistribution: {
     _id: string;
     count: number;
@@ -441,10 +448,6 @@ export interface OrderAnalytics {
     count: number;
     revenue: number;
   }[];
-  orderTrends: {
-    _id: string;
-    orders: number;
-    revenue: number;
-  }[];
   averageDeliveryTime: number;
+  abandonmentRate: string;
 }

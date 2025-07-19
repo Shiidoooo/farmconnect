@@ -39,8 +39,8 @@ const CategoryChart = () => {
     );
   }
 
-  // Transform the product data for the chart - using categories instead of categoryBreakdown
-  const chartData = productData?.categories?.map((item, index) => ({
+  // Transform the product data for the chart - using data instead of categories
+  const chartData = productData?.data?.map((item, index) => ({
     name: item._id || 'Uncategorized',
     value: item.totalQuantity,
     revenue: item.revenue,
@@ -50,44 +50,46 @@ const CategoryChart = () => {
   return (
     <Card className="dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
-        <CardTitle>Product Categories</CardTitle>
+        <CardTitle className="dark:text-white">Product Categories</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-64">
-          <PieChart width={400} height={256}>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, value }) => `${name}: ${value}`}
-              outerRadius={80}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Pie>
-            <Tooltip 
-              formatter={(value, name, props) => [
-                `Quantity: ${value}`,
-                `Revenue: ₱${props.payload.revenue?.toLocaleString()}`
-              ]}
-            />
-          </PieChart>
+        <div className="h-64 min-w-0"> {/* Prevent overflow */}
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, value }) => `${name}: ${value}`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip 
+                formatter={(value, name, props) => [
+                  `Quantity: ${value}`,
+                  `Revenue: ₱${props.payload.revenue?.toLocaleString()}`
+                ]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2 max-h-32 overflow-y-auto"> {/* Scrollable legend */}
           {chartData.map((item) => (
             <div key={item.name} className="flex items-center justify-between text-sm">
-              <div className="flex items-center">
+              <div className="flex items-center min-w-0 flex-1">
                 <div 
-                  className="w-3 h-3 rounded mr-2" 
+                  className="w-3 h-3 rounded mr-2 flex-shrink-0" 
                   style={{ backgroundColor: item.fill }}
                 />
-                <span className="dark:text-gray-300">{item.name}</span>
+                <span className="dark:text-gray-300 truncate capitalize">{item.name}</span>
               </div>
-              <span className="font-medium dark:text-white">{item.value} units</span>
+              <span className="font-medium dark:text-white flex-shrink-0 ml-2">{item.value} units</span>
             </div>
           ))}
         </div>

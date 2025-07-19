@@ -55,39 +55,41 @@ const OrderStatusChart = () => {
   return (
     <Card className="dark:bg-gray-800 dark:border-gray-700">
       <CardHeader>
-        <CardTitle>Order Status Distribution</CardTitle>
+        <CardTitle className="dark:text-white">Order Status Distribution</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-64">
-          <PieChart width={400} height={256}>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              outerRadius={80}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
+        <div className="h-64 min-w-0"> {/* Prevent overflow */}
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="value"
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value, name) => [`${value} orders`, name]} />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2 max-h-32 overflow-y-auto"> {/* Scrollable legend */}
           {chartData.map((item) => (
             <div key={item.name} className="flex items-center justify-between text-sm">
-              <div className="flex items-center">
+              <div className="flex items-center min-w-0 flex-1">
                 <div 
-                  className="w-3 h-3 rounded mr-2" 
+                  className="w-3 h-3 rounded mr-2 flex-shrink-0" 
                   style={{ backgroundColor: item.fill }}
                 />
-                <span className="dark:text-gray-300 capitalize">{item.name}</span>
+                <span className="dark:text-gray-300 capitalize truncate">{item.name}</span>
               </div>
-              <span className="font-medium dark:text-white">{item.value} orders</span>
+              <span className="font-medium dark:text-white flex-shrink-0 ml-2">{item.value} orders</span>
             </div>
           ))}
         </div>

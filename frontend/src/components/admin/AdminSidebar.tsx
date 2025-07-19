@@ -1,4 +1,4 @@
-import { BarChart3, ShoppingBag, Package, Users, TrendingUp, MessageSquare, HelpCircle, Settings, ChevronLeft, Sun, Moon, LogOut, User } from "lucide-react";
+import { BarChart3, ShoppingBag, Package, Users, HelpCircle, Settings, ChevronLeft, Sun, Moon, LogOut, User } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -62,8 +62,6 @@ const AdminSidebar = () => {
         { name: "Orders", path: "/admin/orders", icon: ShoppingBag },
         { name: "Products", path: "/admin/products", icon: Package },
         { name: "Users", path: "/admin/users", icon: Users },
-        { name: "Analytics", path: "/admin/analytics", icon: TrendingUp },
-        { name: "Messages", path: "/admin/messages", icon: MessageSquare },
       ]
     },
     {

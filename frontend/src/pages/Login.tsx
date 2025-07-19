@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import NetworkConfig from '@/lib/network-config';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -21,6 +22,14 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Add test admin credentials function
+  const useTestAdmin = () => {
+    setFormData({
+      email: 'admin@farmconnect.com',
+      password: 'admin123'
+    });
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -43,7 +52,10 @@ const Login = () => {
       }
 
       // Call login API
+      console.log('Attempting login with form data:', formData);
+      console.log('API endpoint will be:', `${NetworkConfig.getApiBaseUrl()}/users/login`);
       const response = await authAPI.login(formData);
+      console.log('Login API response:', response);
       
       if (response.success) {
         // Use AuthContext login function

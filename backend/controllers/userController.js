@@ -148,34 +148,41 @@ const registerUser = async (req, res) => {
 // Login User
 const loginUser = async (req, res) => {
     try {
+        console.log('Login attempt - Request body:', req.body);
         const { email, password } = req.body;
 
         // Validation
         if (!email || !password) {
+            console.log('Login validation failed - missing email or password');
             return res.status(400).json({
                 success: false,
                 message: 'Email and password are required'
             });
         }
 
+        console.log('Looking for user with email:', email);
         // Find user
         const user = await User.findOne({ email });
         if (!user) {
+            console.log('User not found with email:', email);
             return res.status(400).json({
                 success: false,
                 message: 'Invalid email or password'
             });
         }
 
+        console.log('User found, checking password...');
         // Check password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
+            console.log('Invalid password for user:', email);
             return res.status(400).json({
                 success: false,
                 message: 'Invalid email or password'
             });
         }
 
+        console.log('Login successful for user:', email);
         // Generate token
         const token = generateToken(user._id);
 

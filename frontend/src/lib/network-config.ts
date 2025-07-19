@@ -26,11 +26,11 @@ export const NetworkConfig = {
     const currentHost = window.location.hostname;
     
     if (NetworkConfig.isLocalhost()) {
-      return 'http://localhost:5000';
+      return 'http://localhost:3001';
     }
     
-    // Use same IP as frontend but port 5000 for backend
-    return `http://${currentHost}:5000`;
+    // Use same IP as frontend but port 3001 for backend
+    return `http://${currentHost}:3001`;
   },
   
   // Get the API base URL

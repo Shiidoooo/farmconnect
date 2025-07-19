@@ -21,11 +21,12 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:8080', 
+    'http://localhost:8081', // Add port 8081 for frontend
     'http://localhost:3000',
     'http://192.168.1.9:8080', // Network IP
-    /^http:\/\/192\.168\.\d+\.\d+:8080$/, // Allow any local network IP on port 8080
-    /^http:\/\/10\.\d+\.\d+\.\d+:8080$/, // Allow 10.x.x.x network
-    /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:8080$/ // Allow 172.16-31.x.x network
+    /^http:\/\/192\.168\.\d+\.\d+:808[01]$/, // Allow any local network IP on port 8080 or 8081
+    /^http:\/\/10\.\d+\.\d+\.\d+:808[01]$/, // Allow 10.x.x.x network
+    /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+:808[01]$/ // Allow 172.16-31.x.x network
   ],
   credentials: true
 }));

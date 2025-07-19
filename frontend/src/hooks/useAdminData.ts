@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { adminApiService, DashboardStats, SalesAnalytics, ProductAnalytics, CustomerAnalytics, OrderAnalytics } from '../services/adminApi';
+import { DashboardStats, SalesAnalytics, ProductAnalytics, CustomerAnalytics, OrderAnalytics } from '../services/adminApi';
+import api from '../services/api';
 
 // Hook for dashboard statistics
 export const useDashboardStats = () => {
@@ -11,8 +12,8 @@ export const useDashboardStats = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await adminApiService.getDashboardStats();
-      setStats(data);
+      const response = await api.get('/admin/dashboard/stats');
+      setStats(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch dashboard stats');
     } finally {
@@ -41,10 +42,23 @@ export const useSalesAnalytics = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getSalesAnalytics(params);
-      setData(result);
+      
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (params?.period) queryParams.append('period', params.period);
+      if (params?.startDate) queryParams.append('startDate', params.startDate);
+      if (params?.endDate) queryParams.append('endDate', params.endDate);
+
+      const url = `/admin/analytics/sales${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await api.get(url);
+      
+      // Backend returns { data: [...], growth: "...", totalRevenue: ..., totalOrders: ... }
+      // Extract the data array from the response
+      const salesArray = response.data?.data || response.data || [];
+      setData(Array.isArray(salesArray) ? salesArray : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch sales analytics');
+      setData([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -67,8 +81,8 @@ export const useProductAnalytics = () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getProductAnalytics();
-      setData(result);
+      const response = await api.get('/admin/analytics/products');
+      setData(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch product analytics');
     } finally {
@@ -93,8 +107,8 @@ export const useCustomerAnalytics = () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getCustomerAnalytics();
-      setData(result);
+      const response = await api.get('/admin/analytics/customers');
+      setData(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch customer analytics');
     } finally {
@@ -119,8 +133,8 @@ export const useOrderAnalytics = () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getOrderAnalytics();
-      setData(result);
+      const response = await api.get('/admin/analytics/orders');
+      setData(response.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch order analytics');
     } finally {
@@ -159,7 +173,18 @@ export const useOrders = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getAllOrders(params);
+      // Build query parameters  
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.startDate) queryParams.append('startDate', params.startDate);
+      if (params?.endDate) queryParams.append('endDate', params.endDate);
+      if (params?.search) queryParams.append('search', params.search);
+
+      const url = `/admin/orders${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await api.get(url);
+      const result = response.data;
       setOrders(result.orders);
       setTotalOrders(result.totalOrders);
       setPagination({
@@ -177,7 +202,7 @@ export const useOrders = (params?: {
 
   const updateOrderStatus = async (orderId: string, status: string) => {
     try {
-      await adminApiService.updateOrderStatus(orderId, status);
+      await api.put(`/admin/orders/${orderId}/status`, { status });
       // Refresh orders after updating status
       await fetchOrders();
       return true;
@@ -226,7 +251,18 @@ export const useProducts = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getAllProducts(params);
+      // Build query parameters  
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.category) queryParams.append('category', params.category);
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+      if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+
+      const url = `/admin/products${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await api.get(url);
+      const result = response.data;
       setProducts(result.products);
       setTotalProducts(result.totalProducts);
       setPagination({
@@ -279,7 +315,17 @@ export const useUsers = (params?: {
     try {
       setLoading(true);
       setError(null);
-      const result = await adminApiService.getAllUsers(params);
+      // Build query parameters  
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+      if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+
+      const url = `/admin/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await api.get(url);
+      const result = response.data;
       setUsers(result.users);
       setTotalUsers(result.totalUsers);
       setPagination({

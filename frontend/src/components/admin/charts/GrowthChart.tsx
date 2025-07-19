@@ -1,63 +1,60 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from "recharts";
-import { TrendingUp, TrendingDown, DollarSign, Loader } from "lucide-react";
-import { useSalesAnalytics } from "../../../hooks/useAdminData";
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { TrendingUp, TrendingDown, Loader, BarChart3 } from 'lucide-react';
+import { useSalesAnalytics } from '@/hooks/useAdminData';
 
-const RevenueChart = () => {
-  const [period, setPeriod] = useState("monthly");
-  const [chartType, setChartType] = useState("line");
-  
-  // Use real backend data
-  const { data: salesData, loading, error, refetch } = useSalesAnalytics({ 
-    period: period as 'daily' | 'weekly' | 'monthly' | 'yearly' 
-  });
+const GrowthChart = () => {
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>("monthly");
+  const [chartType, setChartType] = useState("area");
+  const { data: salesData, loading, error, refetch } = useSalesAnalytics({ period });
 
-  // Transform backend data for chart display
-  const transformDataForChart = (rawData: any) => {
-    // Handle different data formats from backend
-    let dataArray = [];
+  const transformDataForChart = (data: any[]) => {
+    if (!data || !Array.isArray(data)) return [];
     
-    if (Array.isArray(rawData)) {
-      dataArray = rawData;
-    } else if (rawData && Array.isArray(rawData.data)) {
-      dataArray = rawData.data;
-    } else if (rawData && typeof rawData === 'object') {
-      // If it's an object, try to extract array from common properties
-      dataArray = rawData.salesData || rawData.data || [];
-    }
-    
-    // Ensure we have an array to work with
-    if (!Array.isArray(dataArray)) {
-      console.warn('Expected array for chart data, got:', typeof dataArray, dataArray);
-      return [];
-    }
-    
-    return dataArray.map((item) => ({
-      label: formatLabel(item._id, period),
-      revenue: item.totalRevenue || item.revenue || 0,
-      orders: item.orders || 0,
-      averageOrderValue: item.averageOrderValue || 0,
-    }));
-  };
-
-  const formatLabel = (dateString: string, period: string) => {
-    try {
-      switch (period) {
-        case 'daily':
-          return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        case 'weekly':
-          return `Week ${dateString.split('-W')[1] || dateString}`;
-        case 'yearly':
-          return dateString;
-        default: // monthly
-          const date = new Date(dateString + '-01');
-          return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    return data.map((item, index) => {
+      let label = '';
+      const dateString = item._id || item.date || '';
+      
+      try {
+        switch (period) {
+          case 'daily':
+            const dailyDate = new Date(dateString);
+            label = dailyDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            break;
+          case 'weekly':
+            label = `Week ${dateString.split('-W')[1] || dateString}`;
+            break;
+          case 'yearly':
+            label = dateString;
+            break;
+          default: // monthly
+            const monthlyDate = new Date(dateString + '-01');
+            label = monthlyDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            break;
+        }
+      } catch {
+        label = dateString;
       }
-    } catch {
-      return dateString;
-    }
+
+      // Calculate growth percentage compared to previous period
+      let growthRate = 0;
+      if (index > 0 && data[index - 1]) {
+        const currentRevenue = item.totalRevenue || 0;
+        const previousRevenue = data[index - 1].totalRevenue || 0;
+        if (previousRevenue > 0) {
+          growthRate = ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+        }
+      }
+
+      return {
+        label,
+        growth: Math.round(growthRate * 100) / 100, // Round to 2 decimal places
+        revenue: item.totalRevenue || 0,
+        orders: item.totalOrders || 0
+      };
+    });
   };
 
   const chartData = salesData && !loading ? transformDataForChart(salesData) : [];
@@ -67,12 +64,12 @@ const RevenueChart = () => {
     return (
       <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium dark:text-white">Revenue Analytics</CardTitle>
+          <CardTitle className="text-sm font-medium dark:text-white">Growth Analytics</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[400px]">
+        <CardContent className="flex items-center justify-center h-[350px]">
           <div className="text-center space-y-4">
-            <Loader className="w-8 h-8 animate-spin mx-auto text-blue-600" />
-            <p className="text-muted-foreground">Loading revenue data...</p>
+            <Loader className="w-8 h-8 animate-spin mx-auto text-green-600" />
+            <p className="text-muted-foreground">Loading growth data...</p>
           </div>
         </CardContent>
       </Card>
@@ -84,9 +81,9 @@ const RevenueChart = () => {
     return (
       <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium dark:text-white">Revenue Analytics</CardTitle>
+          <CardTitle className="text-sm font-medium dark:text-white">Growth Analytics</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[400px]">
+        <CardContent className="flex items-center justify-center h-[350px]">
           <div className="text-center space-y-4">
             <div className="text-red-500 text-lg">Error loading data</div>
             <p className="text-muted-foreground">{error}</p>
@@ -102,18 +99,11 @@ const RevenueChart = () => {
     );
   }
 
-  // Calculate growth percentage
-  const calculateGrowth = () => {
-    if (chartData.length < 2) return 0;
-    const current = chartData[chartData.length - 1]?.revenue || 0;
-    const previous = chartData[chartData.length - 2]?.revenue || 0;
-    if (previous === 0) return 0;
-    return ((current - previous) / previous) * 100;
-  };
-
-  const growth = calculateGrowth();
-  const totalRevenue = chartData.reduce((sum, item) => sum + (item.revenue || 0), 0);
-  const avgRevenue = chartData.length > 0 ? totalRevenue / chartData.length : 0;
+  // Calculate statistics
+  const avgGrowth = chartData.length > 0 ? 
+    chartData.reduce((sum, item) => sum + (item.growth || 0), 0) / chartData.length : 0;
+  const maxGrowth = Math.max(...chartData.map(item => item.growth || 0));
+  const minGrowth = Math.min(...chartData.map(item => item.growth || 0));
 
   const periodOptions = [
     { value: "daily", label: "Daily" },
@@ -150,7 +140,7 @@ const RevenueChart = () => {
                 fontSize={10}
                 tick={{ fill: 'currentColor' }}
                 axisLine={false}
-                tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => `${value.toFixed(1)}%`}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -159,11 +149,11 @@ const RevenueChart = () => {
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Revenue']}
+                formatter={(value: number) => [`${value.toFixed(2)}%`, 'Growth Rate']}
               />
               <Bar 
-                dataKey="revenue" 
-                fill="rgb(59, 130, 246)" 
+                dataKey="growth" 
+                fill="rgb(34, 197, 94)"
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>
@@ -175,9 +165,9 @@ const RevenueChart = () => {
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart {...commonProps}>
               <defs>
-                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="rgb(59, 130, 246)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="rgb(59, 130, 246)" stopOpacity={0}/>
+                <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="rgb(34, 197, 94)" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="rgb(34, 197, 94)" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
@@ -191,7 +181,7 @@ const RevenueChart = () => {
                 fontSize={10}
                 tick={{ fill: 'currentColor' }}
                 axisLine={false}
-                tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => `${value.toFixed(1)}%`}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -200,14 +190,14 @@ const RevenueChart = () => {
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Revenue']}
+                formatter={(value: number) => [`${value.toFixed(2)}%`, 'Growth Rate']}
               />
               <Area
                 type="monotone"
-                dataKey="revenue"
-                stroke="rgb(59, 130, 246)"
+                dataKey="growth"
+                stroke="rgb(34, 197, 94)"
                 fillOpacity={1}
-                fill="url(#colorRevenue)"
+                fill="url(#colorGrowth)"
                 strokeWidth={2}
               />
             </AreaChart>
@@ -229,7 +219,7 @@ const RevenueChart = () => {
                 fontSize={10}
                 tick={{ fill: 'currentColor' }}
                 axisLine={false}
-                tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => `${value.toFixed(1)}%`}
               />
               <Tooltip 
                 contentStyle={{ 
@@ -238,15 +228,15 @@ const RevenueChart = () => {
                   borderRadius: '8px',
                   fontSize: '12px'
                 }}
-                formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Revenue']}
+                formatter={(value: number) => [`${value.toFixed(2)}%`, 'Growth Rate']}
               />
               <Line 
                 type="monotone" 
-                dataKey="revenue" 
-                stroke="rgb(59, 130, 246)" 
+                dataKey="growth" 
+                stroke="rgb(34, 197, 94)" 
                 strokeWidth={2}
-                dot={{ fill: 'rgb(59, 130, 246)', strokeWidth: 1, r: 3 }}
-                activeDot={{ r: 5, fill: 'rgb(59, 130, 246)' }}
+                dot={{ fill: 'rgb(34, 197, 94)', strokeWidth: 1, r: 3 }}
+                activeDot={{ r: 5, fill: 'rgb(34, 197, 94)' }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -254,59 +244,26 @@ const RevenueChart = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Revenue Analytics
-            <Loader className="w-4 h-4 animate-spin" />
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-64">
-            <Loader className="w-8 h-8 animate-spin" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle>Revenue Analytics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-64 text-red-500">
-            <p>Error loading data: {error}</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card className="w-full dark:bg-gray-800 dark:border-gray-700 transition-all duration-200 hover:shadow-lg">
       <CardHeader className="pb-4">
         <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
           <div className="space-y-2">
             <CardTitle className="dark:text-white flex items-center gap-2 text-base sm:text-lg">
-              <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-              Revenue Analytics
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+              Growth Analytics
             </CardTitle>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
-              <span>Total: ₱{totalRevenue.toLocaleString()}</span>
-              <span>Avg: ₱{Math.round(avgRevenue).toLocaleString()}</span>
-              <div className={`flex items-center gap-1 ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {growth >= 0 ? <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4" />}
-                <span>{Math.abs(growth).toFixed(1)}%</span>
+              <span>Avg: {avgGrowth.toFixed(1)}%</span>
+              <span>Max: {maxGrowth.toFixed(1)}%</span>
+              <div className={`flex items-center gap-1 ${avgGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {avgGrowth >= 0 ? <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <TrendingDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span>Trend</span>
               </div>
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
-            <Select value={period} onValueChange={setPeriod}>
+            <Select value={period} onValueChange={(value) => setPeriod(value as 'daily' | 'weekly' | 'monthly' | 'yearly')}>
               <SelectTrigger className="w-full sm:w-[120px] lg:w-[140px] h-8 sm:h-9 text-xs sm:text-sm">
                 <SelectValue placeholder="Period" />
               </SelectTrigger>
@@ -340,4 +297,4 @@ const RevenueChart = () => {
   );
 };
 
-export default RevenueChart;
+export default GrowthChart;

@@ -81,8 +81,17 @@ export const authAPI = {
   },
 
   login: async (credentials) => {
-    const response = await api.post('/users/login', credentials);
-    return response.data;
+    try {
+      console.log('Attempting login with credentials:', { email: credentials.email, password: '***' });
+      const response = await api.post('/users/login', credentials);
+      console.log('Login response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Login API error:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      throw error;
+    }
   },
 
   getProfile: async () => {

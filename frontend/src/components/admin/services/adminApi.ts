@@ -72,6 +72,8 @@ export interface DashboardStats {
   weeklyRevenue: number;
   monthlyRevenue: number;
   averageOrderValue: number;
+  customerSatisfactionRate?: string;
+  productsByCategory?: { _id: string; count: number }[];
   recentOrders: any[];
   lowStockProducts: any[];
   expiredProducts: any[];
