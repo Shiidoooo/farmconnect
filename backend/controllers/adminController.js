@@ -3,6 +3,7 @@ const Product = require('../models/ProductModel');
 const User = require('../models/UserModel');
 const Analytics = require('../models/AnalyticsModel');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 // Get dashboard overview statistics
 const getDashboardStats = async (req, res) => {
@@ -562,48 +563,75 @@ const getAllOrders = async (req, res) => {
   }
 };
 
-// Get all products with pagination and filters
+// Product Management Functions
+
+// Get all products with seller information
 const getAllProducts = async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      category, 
-      search,
+    const {
+      page = 1,
+      limit = 10,
+      search = '',
+      category = '',
+      status = '',
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
 
     const skip = (page - 1) * limit;
-    let filter = { isDeleted: { $ne: true } };
+    const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
 
-    // Category filter
-    if (category && category !== 'all') {
-      filter.productCategory = category;
-    }
-
-    // Search filter
+    // Build filter
+    const filter = { isDeleted: { $ne: true } };
+    
     if (search) {
       filter.$or = [
         { productName: { $regex: search, $options: 'i' } },
-        { productDescription: { $regex: search, $options: 'i' } }
+        { productDescription: { $regex: search, $options: 'i' } },
+        { productCategory: { $regex: search, $options: 'i' } }
       ];
     }
 
-    // Sort options
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    if (category) {
+      filter.productCategory = category;
+    }
+
+    if (status) {
+      if (status === 'active') {
+        filter.productStock = { $gt: 0 };
+      } else if (status === 'out_of_stock') {
+        filter.productStock = { $lte: 0 };
+      } else if (status === 'low_stock') {
+        filter.productStock = { $gt: 0, $lte: 10 };
+      }
+    }
 
     const [products, totalProducts] = await Promise.all([
       Product.find(filter)
-        .sort(sortOptions)
+        .populate('user', 'firstName lastName email')
+        .sort(sort)
         .skip(skip)
         .limit(parseInt(limit)),
       Product.countDocuments(filter)
     ]);
 
+    // Transform the data to match frontend expectations
+    const transformedProducts = products.map(product => ({
+      _id: product._id,
+      productName: product.productName,
+      description: product.productDescription,
+      category: product.productCategory,
+      price: product.productPrice,
+      stockQuantity: product.productStock,
+      isActive: product.productStock > 0, // Consider product active if in stock
+      imageUrl: product.productimage?.[0]?.url || null,
+      seller: product.user, // The user field represents the seller
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt || product.createdAt
+    }));
+
     res.json({
-      products,
+      products: transformedProducts,
       totalProducts,
       currentPage: parseInt(page),
       totalPages: Math.ceil(totalProducts / limit),
@@ -616,53 +644,794 @@ const getAllProducts = async (req, res) => {
   }
 };
 
-// Get all users with pagination and filters
-const getAllUsers = async (req, res) => {
+// Get single product by ID
+const getProductById = async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      search,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-
-    const skip = (page - 1) * limit;
-    let filter = {};
-
-    // Search filter
-    if (search) {
-      filter.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
+    const { id } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
     }
 
-    // Sort options
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    const product = await Product.findById(id)
+      .populate('user', 'firstName lastName email')
+      .populate('ratings.user', 'firstName lastName');
 
-    const [users, totalUsers] = await Promise.all([
-      User.find(filter)
-        .select('-password')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(parseInt(limit)),
-      User.countDocuments(filter)
+    if (!product || product.isDeleted) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Transform the data to match frontend expectations
+    const transformedProduct = {
+      _id: product._id,
+      productName: product.productName,
+      description: product.productDescription,
+      category: product.productCategory,
+      price: product.productPrice,
+      stockQuantity: product.productStock,
+      isActive: product.productStock > 0,
+      imageUrl: product.productimage?.[0]?.url || null,
+      seller: product.user,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt || product.createdAt,
+      ratings: product.ratings,
+      averageRating: product.averageRating,
+      totalRatings: product.totalRatings
+    };
+
+    res.json(transformedProduct);
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ message: 'Error fetching product' });
+  }
+};
+
+// Update product status (active/inactive)
+const updateProductStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+
+    if (!['active', 'inactive'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be active or inactive' });
+    }
+
+    const product = await Product.findById(id);
+    if (!product || product.isDeleted) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // For this model, we'll set stock to 0 for inactive and restore previous stock for active
+    // You might want to store the original stock separately in a real application
+    const updateData = {
+      productStock: status === 'active' ? (product.productStock || 1) : 0,
+      updatedAt: new Date()
+    };
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    ).populate('user', 'firstName lastName email');
+
+    // Transform the response
+    const transformedProduct = {
+      _id: updatedProduct._id,
+      productName: updatedProduct.productName,
+      description: updatedProduct.productDescription,
+      category: updatedProduct.productCategory,
+      price: updatedProduct.productPrice,
+      stockQuantity: updatedProduct.productStock,
+      isActive: updatedProduct.productStock > 0,
+      imageUrl: updatedProduct.productimage?.[0]?.url || null,
+      seller: updatedProduct.user,
+      createdAt: updatedProduct.createdAt,
+      updatedAt: updatedProduct.updatedAt
+    };
+
+    res.json({
+      message: 'Product status updated successfully',
+      product: transformedProduct
+    });
+  } catch (error) {
+    console.error('Error updating product status:', error);
+    res.status(500).json({ message: 'Error updating product status' });
+  }
+};
+
+// Update product details
+const updateProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+
+    const product = await Product.findById(id);
+    if (!product || product.isDeleted) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Remove fields that shouldn't be updated via this endpoint
+    delete updates._id;
+    delete updates.seller;
+    delete updates.createdAt;
+    delete updates.isDeleted;
+
+    // Add updatedAt timestamp
+    updates.updatedAt = new Date();
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true, runValidators: true }
+    ).populate('seller', 'firstName lastName email');
+
+    res.json({
+      message: 'Product updated successfully',
+      product: updatedProduct
+    });
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ message: 'Error updating product' });
+  }
+};
+
+// Soft delete product
+const deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+
+    const product = await Product.findById(id);
+    if (!product || product.isDeleted) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Soft delete by marking as deleted
+    await Product.findByIdAndUpdate(id, {
+      isDeleted: true,
+      deletedAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    res.json({ message: 'Product deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ message: 'Error deleting product' });
+  }
+};
+
+// Get product statistics for dashboard
+const getProductStats = async (req, res) => {
+  try {
+    const [
+      totalProducts,
+      activeProducts,
+      outOfStockProducts,
+      lowStockProducts,
+      inactiveProducts,
+      categoriesStats
+    ] = await Promise.all([
+      Product.countDocuments({ isDeleted: { $ne: true } }),
+      Product.countDocuments({ isDeleted: { $ne: true }, productStock: { $gt: 0 } }),
+      Product.countDocuments({ isDeleted: { $ne: true }, productStock: { $lte: 0 } }),
+      Product.countDocuments({ isDeleted: { $ne: true }, productStock: { $gt: 0, $lte: 10 } }),
+      Product.countDocuments({ isDeleted: { $ne: true }, productStock: { $lte: 0 } }), // Using out of stock as inactive
+      Product.aggregate([
+        { $match: { isDeleted: { $ne: true } } },
+        { $group: { _id: '$productCategory', count: { $sum: 1 }, totalStock: { $sum: '$productStock' } } },
+        { $sort: { count: -1 } }
+      ])
     ]);
 
     res.json({
-      users,
-      totalUsers,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalUsers / limit),
-      hasNextPage: page * limit < totalUsers,
-      hasPrevPage: page > 1
+      totalProducts,
+      activeProducts,
+      outOfStockProducts,
+      lowStockProducts,
+      inactiveProducts,
+      categoriesStats
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ message: 'Error fetching users' });
+    console.error('Error fetching product stats:', error);
+    res.status(500).json({ message: 'Error fetching product stats' });
+  }
+};
+
+// ====== USER MANAGEMENT FUNCTIONS ======
+
+// Get all users with advanced filtering and pagination
+const getAllUsers = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, status, type, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    
+    // Build search query
+    let query = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (status) {
+      query.accountStatus = status;
+    }
+    
+    // Sort options
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Get users with populated product data for seller classification
+    const users = await User.find(query)
+      .select('name email phone address accountStatus createdAt updatedAt lastLoginAt')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get total count for pagination
+    const total = await User.countDocuments(query);
+    
+    // Enhance users with additional data
+    const enhancedUsers = await Promise.all(users.map(async (user) => {
+      // Get user's product count to determine if seller
+      const productCount = await Product.countDocuments({ 
+        seller: user._id,
+        isDeleted: { $ne: true }
+      });
+      
+      // Get user's order statistics
+      const orderStats = await Order.aggregate([
+        { $match: { user: user._id } },
+        {
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            totalSpent: { $sum: '$totalAmount' }
+          }
+        }
+      ]);
+      
+      const stats = orderStats[0] || { totalOrders: 0, totalSpent: 0 };
+      
+      return {
+        ...user,
+        userType: productCount > 0 ? 'Seller' : 'Customer',
+        productCount,
+        totalOrders: stats.totalOrders,
+        totalSpent: stats.totalSpent,
+        joinDate: user.createdAt,
+        lastLogin: user.lastLoginAt || user.updatedAt
+      };
+    }));
+    
+    // Apply type filter after enhancement
+    let filteredUsers = enhancedUsers;
+    if (type) {
+      filteredUsers = enhancedUsers.filter(user => 
+        user.userType.toLowerCase() === type.toLowerCase()
+      );
+    }
+    
+    res.json({
+      success: true,
+      data: filteredUsers,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalUsers: total,
+        hasNext: skip + parseInt(limit) < total,
+        hasPrev: parseInt(page) > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error getting all users:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching users',
+      error: error.message
+    });
+  }
+};
+
+// Get user statistics
+const getUserStats = async (req, res) => {
+  try {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const [
+      totalUsers,
+      activeUsers,
+      suspendedUsers,
+      newUsersThisMonth,
+      customerCount,
+      sellerCount
+    ] = await Promise.all([
+      // Total users
+      User.countDocuments(),
+      
+      // Active users
+      User.countDocuments({ accountStatus: 'active' }),
+      
+      // Suspended users
+      User.countDocuments({ accountStatus: 'suspended' }),
+      
+      // New users this month
+      User.countDocuments({
+        createdAt: { $gte: thirtyDaysAgo }
+      }),
+      
+      // Customer count (users with no products)
+      User.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: 'seller',
+            as: 'products'
+          }
+        },
+        {
+          $match: {
+            $or: [
+              { products: { $size: 0 } },
+              { 'products.isDeleted': true }
+            ]
+          }
+        },
+        { $count: "count" }
+      ]).then(result => result[0]?.count || 0),
+      
+      // Seller count (users with products)
+      User.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: 'seller',
+            as: 'products'
+          }
+        },
+        {
+          $match: {
+            products: { $ne: [] },
+            'products.isDeleted': { $ne: true }
+          }
+        },
+        { $count: "count" }
+      ]).then(result => result[0]?.count || 0)
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        totalUsers,
+        activeUsers,
+        suspendedUsers,
+        newUsersThisMonth,
+        customerCount,
+        sellerCount
+      }
+    });
+  } catch (error) {
+    console.error('Error getting user stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user statistics',
+      error: error.message
+    });
+  }
+};
+
+// Get user by ID with detailed information
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+    
+    const user = await User.findById(id)
+      .select('-password')
+      .lean();
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Get user's products for seller info
+    const products = await Product.find({ 
+      seller: id,
+      isDeleted: { $ne: true }
+    }).select('name price category stockQuantity');
+    
+    // Get user's order history
+    const orders = await Order.find({ user: id })
+      .populate('items.product', 'name price')
+      .select('orderNumber totalAmount orderStatus createdAt deliveryAddress')
+      .sort({ createdAt: -1 })
+      .limit(10);
+    
+    // Calculate user statistics
+    const orderStats = await Order.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(id) } },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalSpent: { $sum: '$totalAmount' },
+          completedOrders: {
+            $sum: { $cond: [{ $eq: ['$orderStatus', 'delivered'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+    
+    const stats = orderStats[0] || { totalOrders: 0, totalSpent: 0, completedOrders: 0 };
+    
+    // Enhanced user data
+    const enhancedUser = {
+      ...user,
+      userType: products.length > 0 ? 'Seller' : 'Customer',
+      productCount: products.length,
+      products: products,
+      recentOrders: orders,
+      statistics: {
+        totalOrders: stats.totalOrders,
+        totalSpent: stats.totalSpent,
+        completedOrders: stats.completedOrders,
+        averageOrderValue: stats.totalOrders > 0 ? stats.totalSpent / stats.totalOrders : 0
+      }
+    };
+    
+    res.json({
+      success: true,
+      data: enhancedUser
+    });
+  } catch (error) {
+    console.error('Error getting user by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user details',
+      error: error.message
+    });
+  }
+};
+
+// Update user status (activate/suspend)
+const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+    
+    if (!['active', 'suspended'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be "active" or "suspended"'
+      });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      id,
+      { 
+        accountStatus: status,
+        updatedAt: new Date()
+      },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `User ${status === 'active' ? 'activated' : 'suspended'} successfully`,
+      data: user
+    });
+  } catch (error) {
+    console.error('Error updating user status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user status',
+      error: error.message
+    });
+  }
+};
+
+// Delete user (soft delete)
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+    
+    // Check if user has active orders
+    const activeOrders = await Order.countDocuments({
+      user: id,
+      orderStatus: { $in: ['pending', 'confirmed', 'processing', 'shipped'] }
+    });
+    
+    if (activeOrders > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete user with active orders. Please wait for orders to complete or cancel them first.'
+      });
+    }
+    
+    // Soft delete user
+    const user = await User.findByIdAndUpdate(
+      id,
+      { 
+        accountStatus: 'deleted',
+        deletedAt: new Date(),
+        updatedAt: new Date()
+      },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Also soft delete user's products
+    await Product.updateMany(
+      { seller: id },
+      { 
+        isDeleted: true,
+        deletedAt: new Date(),
+        updatedAt: new Date()
+      }
+    );
+    
+    res.json({
+      success: true,
+      message: 'User deleted successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user',
+      error: error.message
+    });
+  }
+};
+
+// Update user information
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+    
+    // Remove sensitive fields that shouldn't be updated through this endpoint
+    delete updateData.password;
+    delete updateData._id;
+    delete updateData.createdAt;
+    
+    // Add update timestamp
+    updateData.updatedAt = new Date();
+    
+    const user = await User.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      data: user
+    });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user',
+      error: error.message
+    });
+  }
+};
+
+// Create new user (Admin function)
+const createUser = async (req, res) => {
+  try {
+    const { 
+      name, 
+      email, 
+      password, 
+      phone, 
+      userType = 'user',
+      accountStatus = 'active',
+      address,
+      dateOfBirth,
+      gender 
+    } = req.body;
+
+    // Validation
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required'
+      });
+    }
+
+    // Required fields validation based on current User model
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required'
+      });
+    }
+
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        message: 'Address is required'
+      });
+    }
+
+    if (!dateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date of birth is required'
+      });
+    }
+
+    if (!gender) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gender is required'
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Convert address object to string if it's an object
+    let addressString = address;
+    if (typeof address === 'object' && address !== null) {
+      const { street, city, province, zipCode } = address;
+      addressString = [street, city, province, zipCode].filter(Boolean).join(', ');
+    }
+
+    // Create user data object matching the current User model
+    const userData = {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
+      phone_number: phone.trim(), // Note: model uses phone_number, not phone
+      address: addressString || 'Address not provided',
+      role: userType === 'admin' ? 'admin' : 'user', // Convert userType to role
+      dateOfBirth: new Date(dateOfBirth),
+      gender: gender,
+      createdAt: new Date()
+    };
+
+    // Create new user
+    const newUser = new User(userData);
+    const savedUser = await newUser.save();
+
+    // Remove password from response
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: userResponse
+    });
+
+  } catch (error) {
+    console.error('Error creating user:', error);
+    
+    // Handle specific MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: validationErrors
+      });
+    }
+
+    // Handle duplicate key error (shouldn't happen due to pre-check, but just in case)
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user',
+      error: error.message
+    });
   }
 };
 
@@ -675,5 +1444,16 @@ module.exports = {
   updateOrderStatus,
   getAllOrders,
   getAllProducts,
-  getAllUsers
+  getProductById,
+  updateProductStatus,
+  updateProduct,
+  deleteProduct,
+  getProductStats,
+  getAllUsers,
+  getUserStats,
+  getUserById,
+  updateUserStatus,
+  deleteUser,
+  updateUser,
+  createUser
 };

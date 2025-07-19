@@ -116,7 +116,7 @@ class AdminApiService {
       if (params?.endDate) queryParams.append('endDate', params.endDate);
       if (params?.search) queryParams.append('search', params.search);
 
-      const url = `${NetworkConfig.getBackendUrl()}/api/admin/admin/orders${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const url = `${NetworkConfig.getBackendUrl()}/api/admin/orders${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
@@ -130,7 +130,7 @@ class AdminApiService {
 
   async updateOrderStatus(orderId: string, status: string) {
     try {
-      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/admin/orders/${orderId}/status`, {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/orders/${orderId}/status`, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ status }),
@@ -147,6 +147,7 @@ class AdminApiService {
     page?: number;
     limit?: number;
     category?: string;
+    status?: string;
     search?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
@@ -156,11 +157,12 @@ class AdminApiService {
       if (params?.page) queryParams.append('page', params.page.toString());
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.category) queryParams.append('category', params.category);
+      if (params?.status) queryParams.append('status', params.status);
       if (params?.search) queryParams.append('search', params.search);
       if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
       if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-      const url = `${NetworkConfig.getBackendUrl()}/api/admin/admin/products${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const url = `${NetworkConfig.getBackendUrl()}/api/admin/products${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
@@ -172,11 +174,80 @@ class AdminApiService {
     }
   }
 
+  async getProductById(productId: string) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/products/${productId}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error fetching product:', error);
+      throw error;
+    }
+  }
+
+  async updateProductStatus(productId: string, status: string) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/products/${productId}/status`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error updating product status:', error);
+      throw error;
+    }
+  }
+
+  async updateProduct(productId: string, updates: any) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/products/${productId}`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(updates),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+  }
+
+  async deleteProduct(productId: string) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/products/${productId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+  }
+
+  async getProductStats() {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/products/stats`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error fetching product stats:', error);
+      throw error;
+    }
+  }
+
   // User Management
   async getAllUsers(params?: {
     page?: number;
     limit?: number;
     search?: string;
+    status?: string;
+    type?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }) {
@@ -185,10 +256,12 @@ class AdminApiService {
       if (params?.page) queryParams.append('page', params.page.toString());
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.search) queryParams.append('search', params.search);
+      if (params?.status) queryParams.append('status', params.status);
+      if (params?.type) queryParams.append('type', params.type);
       if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
       if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
-      const url = `${NetworkConfig.getBackendUrl()}/api/admin/admin/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const url = `${NetworkConfig.getBackendUrl()}/api/admin/users${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
@@ -196,6 +269,97 @@ class AdminApiService {
       return this.handleResponse(response);
     } catch (error) {
       console.error('Error fetching users:', error);
+      throw error;
+    }
+  }
+
+  async getUserStats() {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users/stats`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      throw error;
+    }
+  }
+
+  async getUserById(userId: string) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users/${userId}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+      throw error;
+    }
+  }
+
+  async updateUserStatus(userId: string, status: 'active' | 'suspended') {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users/${userId}/status`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(userId: string, userData: any) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(userData),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  }
+
+  async createUser(userData: {
+    name: string;
+    email: string;
+    password: string;
+    phone: string;
+    userType?: 'user' | 'admin';
+    accountStatus?: 'active' | 'suspended';
+    address: string;
+    dateOfBirth: string;
+    gender: 'male' | 'female' | 'prefer not to say';
+  }) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(userData),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  }
+
+  async deleteUser(userId: string) {
+    try {
+      const response = await fetch(`${NetworkConfig.getBackendUrl()}/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error('Error deleting user:', error);
       throw error;
     }
   }

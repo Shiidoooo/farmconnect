@@ -93,25 +93,28 @@ const SummaryChart = () => {
       <CardContent>
         <div className="h-[250px] sm:h-[300px] w-full">
           <ChartContainer config={chartConfig} className="h-full w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={currentData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <XAxis dataKey="period" />
-                <YAxis />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar 
-                  dataKey="revenue" 
-                  fill="hsl(24, 95%, 66%)"
-                  radius={[4, 4, 0, 0]}
-                  opacity={0.8}
-                />
-                <Bar 
-                  dataKey="netIncome" 
-                  fill="hsl(262, 83%, 58%)"
-                  radius={[4, 4, 0, 0]}
-                  opacity={0.9}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            <BarChart 
+              data={currentData} 
+              width={800} 
+              height={250}
+              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+            >
+              <XAxis dataKey="period" />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar 
+                dataKey="revenue" 
+                fill="hsl(24, 95%, 66%)"
+                radius={[4, 4, 0, 0]}
+                opacity={0.8}
+              />
+              <Bar 
+                dataKey="netIncome" 
+                fill="hsl(262, 83%, 58%)"
+                radius={[4, 4, 0, 0]}
+                opacity={0.9}
+              />
+            </BarChart>
           </ChartContainer>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 mt-4">

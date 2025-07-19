@@ -47,21 +47,19 @@ const OrdersChart = () => {
       </CardHeader>
       <CardContent>
         <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="_id" />
-              <YAxis />
-              <Tooltip />
-              <Line 
-                type="monotone" 
-                dataKey="orders" 
-                stroke="#8884d8" 
-                strokeWidth={2}
-                name="Orders"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <LineChart width={500} height={256} data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="_id" />
+            <YAxis />
+            <Tooltip />
+            <Line 
+              type="monotone" 
+              dataKey="orders" 
+              stroke="#8884d8" 
+              strokeWidth={2}
+              name="Orders"
+            />
+          </LineChart>
         </div>
       </CardContent>
     </Card>
