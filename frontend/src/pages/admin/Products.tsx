@@ -1,4 +1,5 @@
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,18 +7,77 @@ import AdminLayout from "@/components/admin/AdminLayout";
 import ProductsTable from "@/components/admin/ProductsTable";
 import StatsCard from "@/components/admin/StatsCard";
 import { Search, Filter, Plus, Package, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { adminAPI } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const AdminProducts = () => {
-  const products = [
-    { id: "1", name: "Organic Tomato Seeds", category: "Seeds", price: "₱15.00", stock: 150, status: "active" as const, image: "🍅" },
-    { id: "2", name: "Lettuce Starter Kit", category: "Kits", price: "₱24.00", stock: 89, status: "active" as const, image: "🥬" },
-    { id: "3", name: "Herb Garden Bundle", category: "Bundles", price: "₱46.80", stock: 0, status: "out_of_stock" as const, image: "🌿" },
-    { id: "4", name: "Composting Kit", category: "Tools", price: "₱105.24", stock: 25, status: "active" as const, image: "♻️" },
-    { id: "5", name: "Garden Tool Set", category: "Tools", price: "₱20.50", stock: 67, status: "active" as const, image: "🛠️" },
-    { id: "6", name: "Fertilizer Pack", category: "Fertilizers", price: "₱32.00", stock: 0, status: "out_of_stock" as const, image: "🌱" },
-    { id: "7", name: "Watering Can", category: "Tools", price: "₱18.00", stock: 43, status: "inactive" as const, image: "💧" },
-    { id: "8", name: "Seed Starter Tray", category: "Tools", price: "₱9.50", stock: 124, status: "active" as const, image: "📦" },
-  ];
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    active: 0,
+    outOfStock: 0,
+    inactive: 0
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const { toast } = useToast();
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching products with params:', { page: currentPage, limit: 20, search: searchTerm });
+      
+      const response = await adminAPI.getProducts({
+        page: currentPage,
+        limit: 20,
+        search: searchTerm
+      });
+      
+      console.log('Products API response:', response);
+      
+      // Check for both response structures - admin API returns 'products', regular API returns 'data'
+      const products = response.products || response.data || [];
+      
+      if (products && products.length >= 0) {
+        setProducts(products);
+        console.log('Products set:', products);
+        
+        // Calculate stats
+        const active = products.filter(p => p.productStatus === 'available').length;
+        const outOfStock = products.filter(p => p.productStatus === 'out_of_stock').length;
+        const inactive = products.filter(p => ['pre_order', 'coming_soon'].includes(p.productStatus)).length;
+        
+        setStats({
+          total: response.totalProducts || products.length,
+          active,
+          outOfStock,
+          inactive
+        });
+      } else {
+        console.log('No products found in response');
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch products data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, [currentPage, searchTerm]);
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
 
   return (
     <AdminLayout>
@@ -31,27 +91,27 @@ const AdminProducts = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatsCard
             title="Total Products"
-            value="567"
+            value={stats.total.toString()}
             change="+5.1%"
             changeType="positive"
             icon={Package}
           />
           <StatsCard
             title="Active Products"
-            value="512"
+            value={stats.active.toString()}
             description="Currently selling"
             icon={CheckCircle}
           />
           <StatsCard
             title="Out of Stock"
-            value="23"
-            description="Need restocking"
+            value={stats.outOfStock.toString()}
+            description="Sold out"
             icon={AlertTriangle}
           />
           <StatsCard
             title="Inactive Products"
-            value="32"
-            description="Not selling"
+            value={stats.inactive.toString()}
+            description="Pre-order/Coming soon"
             icon={XCircle}
           />
         </div>
@@ -64,7 +124,12 @@ const AdminProducts = () => {
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input placeholder="Search products..." className="pl-10 w-full sm:w-64" />
+                  <Input 
+                    placeholder="Search products..." 
+                    className="pl-10 w-full sm:w-64"
+                    value={searchTerm}
+                    onChange={(e) => handleSearch(e.target.value)}
+                  />
                 </div>
                 <Button variant="outline" size="sm">
                   <Filter className="w-4 h-4 mr-2" />
@@ -78,7 +143,13 @@ const AdminProducts = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <ProductsTable products={products} />
+            {loading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="text-lg">Loading products...</div>
+              </div>
+            ) : (
+              <ProductsTable products={products} />
+            )}
           </CardContent>
         </Card>
       </div>

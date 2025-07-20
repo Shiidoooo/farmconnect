@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Package } from "lucide-react";
 import { useState, useEffect } from "react";
-import { orderAPI, auth } from "@/services/api";
+import { orderAPI, auth, productsAPI } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import ProductRatingDialog from "@/components/ProductRatingDialog";
 
 const PurchaseSection = () => {
   const [activePurchaseStatus, setActivePurchaseStatus] = useState('all');
@@ -15,6 +16,12 @@ const PurchaseSection = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmingOrder, setConfirmingOrder] = useState(null);
+  const [ratingDialog, setRatingDialog] = useState({
+    isOpen: false,
+    product: null,
+    orderId: null
+  });
+  const [orderRatings, setOrderRatings] = useState({}); // Track which products have been rated per order
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -30,11 +37,8 @@ const PurchaseSection = () => {
         setLoading(true);
         const response = await orderAPI.getUserOrders();
         
-        console.log('Orders response:', response); // Debug log
-        
         if (response.success) {
           const ordersData = response.data || [];
-          console.log('Orders data:', ordersData); // Debug log
           setOrders(ordersData);
         } else {
           console.error('Failed to fetch orders:', response.message);
@@ -58,6 +62,14 @@ const PurchaseSection = () => {
 
     fetchOrders();
   }, [toast]);
+
+  // Load ratings for delivered orders when orders change
+  useEffect(() => {
+    const deliveredOrders = orders.filter(order => order.orderStatus === 'delivered');
+    if (deliveredOrders.length > 0) {
+      loadOrderRatings(deliveredOrders);
+    }
+  }, [orders]);
 
   // Filter orders based on status and search query
   useEffect(() => {
@@ -202,6 +214,40 @@ const PurchaseSection = () => {
     }
   };
 
+  // Load rating status for delivered orders
+  const loadOrderRatings = async (deliveredOrders) => {
+    const ratingsMap = {};
+    
+    for (const order of deliveredOrders) {
+      try {
+        const response = await productsAPI.checkOrderRatings(order._id);
+        if (response.success) {
+          ratingsMap[order._id] = response.data.products;
+        }
+      } catch (error) {
+        console.error(`Error loading ratings for order ${order._id}:`, error);
+      }
+    }
+    
+    setOrderRatings(ratingsMap);
+  };
+
+  // Handle rating a product
+  const handleRateProduct = (product, orderId) => {
+    setRatingDialog({
+      isOpen: true,
+      product: product,
+      orderId: orderId
+    });
+  };
+
+  // Handle rating submission
+  const handleRatingSubmitted = () => {
+    // Reload order ratings to reflect the new rating
+    const deliveredOrders = orders.filter(order => order.orderStatus === 'delivered');
+    loadOrderRatings(deliveredOrders);
+  };
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -282,6 +328,11 @@ const PurchaseSection = () => {
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-800">
                       {firstProduct.product?.productName || 'Unknown Product'}
+                      {firstProduct.selectedSize && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          (Size: {firstProduct.selectedSize.toUpperCase()})
+                        </span>
+                      )}
                       {totalProducts > 1 && (
                         <span className="text-sm text-gray-500 ml-2">
                           +{totalProducts - 1} more item{totalProducts > 2 ? 's' : ''}
@@ -309,9 +360,30 @@ const PurchaseSection = () => {
                         </Button>
                       )}
                       {order.orderStatus === 'delivered' && (
-                        <Button size="sm" variant="outline" className="text-xs">
-                          Rate & Review
-                        </Button>
+                        <div className="flex flex-col space-y-1">
+                          {order.products?.map((productItem, index) => {
+                            const orderRatingData = orderRatings[order._id];
+                            const productRating = orderRatingData?.find(
+                              p => p.productId === productItem.product._id
+                            );
+                            const hasRated = productRating?.hasRated || false;
+                            
+                            return (
+                              <Button 
+                                key={`${productItem.product._id}-${index}`}
+                                size="sm" 
+                                variant={hasRated ? "secondary" : "outline"} 
+                                className="text-xs"
+                                onClick={() => handleRateProduct(productItem.product, order._id)}
+                                disabled={hasRated}
+                              >
+                                {hasRated ? '✓ Rated' : 'Rate'} {productItem.product.productName.length > 15 
+                                  ? productItem.product.productName.substring(0, 15) + '...' 
+                                  : productItem.product.productName}
+                              </Button>
+                            );
+                          })}
+                        </div>
                       )}
                       <Button 
                         size="sm" 
@@ -369,6 +441,15 @@ const PurchaseSection = () => {
           )}
         </div>
       )}
+
+      {/* Product Rating Dialog */}
+      <ProductRatingDialog
+        isOpen={ratingDialog.isOpen}
+        onOpenChange={(open) => setRatingDialog({ ...ratingDialog, isOpen: open })}
+        product={ratingDialog.product}
+        orderId={ratingDialog.orderId}
+        onRatingSubmitted={handleRatingSubmitted}
+      />
     </div>
   );
 };

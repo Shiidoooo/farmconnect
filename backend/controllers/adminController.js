@@ -14,26 +14,30 @@ const getDashboardStats = async (req, res) => {
 
     // Parallel queries for better performance
     const [
-      totalRevenue,
+      totalSales,
       totalOrders,
+      deliveredOrders,
       totalUsers,
       totalProducts,
-      todayRevenue,
+      todaySales,
       todayOrders,
-      weeklyRevenue,
-      monthlyRevenue,
+      weeklySales,
+      monthlySales,
       recentOrders,
       lowStockProducts,
       expiredProducts
     ] = await Promise.all([
-      // Total revenue
+      // Total sales from delivered orders only
       Order.aggregate([
-        { $match: { orderStatus: { $in: ['delivered', 'confirmed'] } } },
+        { $match: { orderStatus: 'delivered' } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ]),
       
-      // Total orders
+      // Total orders (all statuses)
       Order.countDocuments(),
+      
+      // Delivered orders count
+      Order.countDocuments({ orderStatus: 'delivered' }),
       
       // Total users
       User.countDocuments(),
@@ -41,37 +45,37 @@ const getDashboardStats = async (req, res) => {
       // Total products
       Product.countDocuments({ isDeleted: { $ne: true } }),
       
-      // Today's revenue
+      // Today's sales from delivered orders only
       Order.aggregate([
         { 
           $match: { 
             createdAt: { $gte: startOfDay },
-            orderStatus: { $in: ['delivered', 'confirmed'] }
+            orderStatus: 'delivered'
           }
         },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ]),
       
-      // Today's orders
+      // Today's orders (all statuses)
       Order.countDocuments({ createdAt: { $gte: startOfDay } }),
       
-      // Weekly revenue
+      // Weekly sales from delivered orders only
       Order.aggregate([
         { 
           $match: { 
             createdAt: { $gte: sevenDaysAgo },
-            orderStatus: { $in: ['delivered', 'confirmed'] }
+            orderStatus: 'delivered'
           }
         },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ]),
       
-      // Monthly revenue
+      // Monthly sales from delivered orders only
       Order.aggregate([
         { 
           $match: { 
             createdAt: { $gte: thirtyDaysAgo },
-            orderStatus: { $in: ['delivered', 'confirmed'] }
+            orderStatus: 'delivered'
           }
         },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
@@ -79,7 +83,7 @@ const getDashboardStats = async (req, res) => {
       
       // Recent orders
       Order.find()
-        .populate('user', 'firstName lastName email')
+        .populate('user', 'name email')
         .populate('products.product', 'productName')
         .sort({ createdAt: -1 })
         .limit(10),
@@ -97,19 +101,42 @@ const getDashboardStats = async (req, res) => {
       }).limit(5)
     ]);
 
+    const totalSalesAmount = totalSales[0]?.total || 0;
+    const todaySalesAmount = todaySales[0]?.total || 0;
+    const weeklySalesAmount = weeklySales[0]?.total || 0;
+    const monthlySalesAmount = monthlySales[0]?.total || 0;
+
+    // Calculate 2% commission (platform revenue)
+    const totalRevenue = totalSalesAmount * 0.02;
+    const todayRevenue = todaySalesAmount * 0.02;
+    const weeklyRevenue = weeklySalesAmount * 0.02;
+    const monthlyRevenue = monthlySalesAmount * 0.02;
+
     const stats = {
-      totalRevenue: totalRevenue[0]?.total || 0,
+      // Sales metrics (total customer spending)
+      totalSales: totalSalesAmount,
+      todaySales: todaySalesAmount,
+      weeklySales: weeklySalesAmount,
+      monthlySales: monthlySalesAmount,
+      
+      // Revenue metrics (2% commission)
+      totalRevenue,
+      todayRevenue,
+      weeklyRevenue,
+      monthlyRevenue,
+      
+      // Order metrics
       totalOrders,
+      deliveredOrders,
+      todayOrders,
+      
+      // Other metrics
       totalUsers,
       totalProducts,
-      todayRevenue: todayRevenue[0]?.total || 0,
-      todayOrders,
-      weeklyRevenue: weeklyRevenue[0]?.total || 0,
-      monthlyRevenue: monthlyRevenue[0]?.total || 0,
       recentOrders,
       lowStockProducts,
       expiredProducts,
-      averageOrderValue: totalOrders > 0 ? (totalRevenue[0]?.total || 0) / totalOrders : 0
+      averageOrderValue: deliveredOrders > 0 ? totalSalesAmount / deliveredOrders : 0
     };
 
     res.json(stats);
@@ -156,7 +183,7 @@ const getSalesAnalytics = async (req, res) => {
     }
 
     const salesData = await Order.aggregate([
-      { $match: { ...dateFilter, orderStatus: { $in: ['delivered', 'confirmed'] } } },
+      { $match: { ...dateFilter, orderStatus: 'delivered' } },
       {
         $group: {
           _id: groupFormat,
@@ -540,7 +567,7 @@ const getAllOrders = async (req, res) => {
 
     const [orders, totalOrders] = await Promise.all([
       Order.find(filter)
-        .populate('user', 'firstName lastName email')
+        .populate('user', 'name email')
         .populate('products.product', 'productName productCategory')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -596,6 +623,7 @@ const getAllProducts = async (req, res) => {
 
     const [products, totalProducts] = await Promise.all([
       Product.find(filter)
+        .populate('user', 'name email')
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit)),

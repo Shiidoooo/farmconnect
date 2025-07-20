@@ -190,12 +190,26 @@ export const productsAPI = {
     const response = await api.post(`/products/${productId}/rating`, ratingData);
     return response.data;
   },
+
+  addOrderRating: async (productId, ratingData) => {
+    const response = await api.post(`/products/${productId}/order-rating`, ratingData);
+    return response.data;
+  },
+
+  checkOrderRatings: async (orderId) => {
+    const response = await api.get(`/products/order/${orderId}/rating-status`);
+    return response.data;
+  },
 };
 
 // Cart API calls
 export const cartAPI = {
-  addToCart: async (productId, quantity = 1) => {
-    const response = await api.post('/users/cart/add', { productId, quantity });
+  addToCart: async (productId: string, quantity = 1, selectedSize?: string) => {
+    const response = await api.post('/users/cart/add', { 
+      productId, 
+      quantity,
+      ...(selectedSize && { selectedSize })
+    });
     return response.data;
   },
 
@@ -340,6 +354,11 @@ export const weatherAPI = {
 export const adminAPI = {
   getDashboardData: async () => {
     const response = await api.get('/admin/dashboard');
+    return response.data;
+  },
+
+  getAnalytics: async () => {
+    const response = await api.get('/admin/analytics');
     return response.data;
   },
 

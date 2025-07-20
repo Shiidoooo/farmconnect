@@ -1,6 +1,7 @@
 const Order = require('../models/OrderModel');
 const User = require('../models/UserModel');
 const Product = require('../models/ProductModel');
+const DeliveryCalculator = require('../utils/deliveryCalculator');
 
 // Helper function to process seller payment distribution
 const processSellerPayment = async (order, adminId) => {
@@ -103,7 +104,8 @@ const createOrder = async (req, res) => {
         const userId = req.user._id;
         const {
             shippingAddress,
-            shippingFee = 0,
+            deliveryDistance = 5, // Default 5km if not provided
+            selectedVehicle = null, // Auto-select if not provided
             paymentMethod = { type: 'cod' },
             selectedItems
         } = req.body;
@@ -115,7 +117,7 @@ const createOrder = async (req, res) => {
         const user = await User.findById(userId)
             .populate({
                 path: 'cart.product',
-                select: 'productName productPrice productStock'
+                select: 'productName productPrice productStock hasMultipleSizes sizeVariants'
             })
             .populate('ewallets');
 
@@ -152,9 +154,9 @@ const createOrder = async (req, res) => {
             itemsToProcess = user.cart;
         }
 
-        // Validate shipping address (removed postalCode validation)
+        // Validate shipping address (removed city requirement since address is now complete)
         if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.phoneNumber || 
-            !shippingAddress.address || !shippingAddress.city) {
+            !shippingAddress.address) {
             return res.status(400).json({
                 success: false,
                 message: 'Complete shipping address is required'
@@ -168,7 +170,7 @@ const createOrder = async (req, res) => {
         for (const cartItem of itemsToProcess) {
             const product = cartItem.product;
             
-            // Check if product exists and has enough stock
+            // Check if product exists
             if (!product) {
                 return res.status(400).json({
                     success: false,
@@ -176,22 +178,71 @@ const createOrder = async (req, res) => {
                 });
             }
 
-            if (product.productStock < cartItem.quantity) {
+            // Determine price and stock based on size variant or regular product
+            let itemPrice;
+            let availableStock;
+
+            if (product.hasMultipleSizes && product.sizeVariants?.length > 0 && cartItem.selectedSize) {
+                // Find the specific size variant
+                const variant = product.sizeVariants.find(v => v.size === cartItem.selectedSize);
+                if (!variant) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Size variant ${cartItem.selectedSize} not found for ${product.productName}`
+                    });
+                }
+                itemPrice = variant.price;
+                availableStock = variant.stock;
+            } else {
+                // Regular product without size variants
+                itemPrice = product.productPrice;
+                availableStock = product.productStock;
+            }
+
+            // Check stock availability
+            if (availableStock < cartItem.quantity) {
+                const sizeInfo = cartItem.selectedSize ? ` (Size: ${cartItem.selectedSize})` : '';
                 return res.status(400).json({
                     success: false,
-                    message: `Insufficient stock for ${product.productName}. Available: ${product.productStock}, Requested: ${cartItem.quantity}`
+                    message: `Insufficient stock for ${product.productName}${sizeInfo}. Available: ${availableStock}, Requested: ${cartItem.quantity}`
                 });
             }
 
-            const itemTotal = product.productPrice * cartItem.quantity;
+            const itemTotal = itemPrice * cartItem.quantity;
             subtotal += itemTotal;
 
             orderProducts.push({
                 product: product._id,
                 quantity: cartItem.quantity,
-                price: product.productPrice
+                price: itemPrice,
+                selectedSize: cartItem.selectedSize || null // Include size information
             });
         }
+
+        // Initialize delivery calculator
+        const deliveryCalculator = new DeliveryCalculator();
+
+        // Populate products for weight calculation
+        const populatedOrderProducts = [];
+        for (const orderProduct of orderProducts) {
+            const fullProduct = await Product.findById(orderProduct.product)
+                .select('productName productCategory averageWeightPerPiece hasMultipleSizes sizeVariants unit');
+            
+            populatedOrderProducts.push({
+                ...orderProduct,
+                product: fullProduct
+            });
+        }
+
+        // Calculate delivery cost based on weight and distance
+        const totalWeight = deliveryCalculator.calculateOrderWeight(populatedOrderProducts);
+        const deliveryCalculation = deliveryCalculator.calculateDeliveryCost(
+            totalWeight, 
+            deliveryDistance, 
+            selectedVehicle
+        );
+
+        const shippingFee = deliveryCalculation.totalCost;
 
         const totalAmount = subtotal + shippingFee;
 
@@ -247,7 +298,19 @@ const createOrder = async (req, res) => {
             subtotal: subtotal,
             shipping: {
                 fee: shippingFee,
-                address: shippingAddress
+                address: shippingAddress,
+                deliveryDetails: {
+                    vehicleType: deliveryCalculation.vehicleType,
+                    vehicleName: deliveryCalculation.vehicleName,
+                    totalWeight: deliveryCalculation.totalWeight,
+                    totalWeightKg: deliveryCalculation.totalWeightKg,
+                    distance: deliveryCalculation.distance,
+                    tripsNeeded: deliveryCalculation.tripsNeeded,
+                    warnings: deliveryCalculation.warnings,
+                    recommendations: deliveryCalculation.recommendations,
+                    weightUtilization: deliveryCalculation.weightUtilization,
+                    breakdown: deliveryCalculation.breakdown
+                }
             },
             totalAmount: totalAmount,
             paymentMethod: paymentMethod,
@@ -262,24 +325,44 @@ const createOrder = async (req, res) => {
         // Update product stock and remove ordered items from user's cart
         const orderedProductIds = [];
         for (const cartItem of itemsToProcess) {
-            await Product.findByIdAndUpdate(
-                cartItem.product._id,
-                { $inc: { productStock: -cartItem.quantity, totalSold: cartItem.quantity } }
-            );
-            orderedProductIds.push(cartItem.product._id.toString());
+            const product = await Product.findById(cartItem.product._id);
+            
+            if (product.hasMultipleSizes && product.sizeVariants?.length > 0 && cartItem.selectedSize) {
+                // Update specific size variant stock
+                const variantIndex = product.sizeVariants.findIndex(v => v.size === cartItem.selectedSize);
+                if (variantIndex !== -1) {
+                    product.sizeVariants[variantIndex].stock -= cartItem.quantity;
+                    await product.save();
+                }
+            } else {
+                // Update regular product stock
+                await Product.findByIdAndUpdate(
+                    cartItem.product._id,
+                    { $inc: { productStock: -cartItem.quantity, totalSold: cartItem.quantity } }
+                );
+            }
+            
+            // Track ordered product for cart removal
+            const itemKey = cartItem.selectedSize ? 
+                `${cartItem.product._id}-${cartItem.selectedSize}` : 
+                cartItem.product._id.toString();
+            orderedProductIds.push(itemKey);
         }
 
-        // Remove ordered items from user's cart
-        user.cart = user.cart.filter(item => 
-            !orderedProductIds.includes(item.product._id.toString())
-        );
+        // Remove ordered items from user's cart (need to match both product ID and size)
+        user.cart = user.cart.filter(item => {
+            const itemKey = item.selectedSize ? 
+                `${item.product._id}-${item.selectedSize}` : 
+                item.product._id.toString();
+            return !orderedProductIds.includes(itemKey);
+        });
         await user.save();
 
         // Populate the saved order with product details
         const populatedOrder = await Order.findById(savedOrder._id)
             .populate({
                 path: 'products.product',
-                select: 'productName productPrice productimage'
+                select: 'productName productPrice productimage hasMultipleSizes sizeVariants'
             })
             .populate('user', 'name email');
 
@@ -287,10 +370,32 @@ const createOrder = async (req, res) => {
             ? `Order created successfully and payment of ₱${totalAmount} has been processed`
             : 'Order created successfully. Payment will be collected on delivery';
 
+        // Prepare delivery warnings and recommendations
+        const deliveryWarnings = deliveryCalculation.warnings.length > 0 ? 
+            deliveryCalculation.warnings : null;
+        const deliveryRecommendations = deliveryCalculation.recommendations.length > 0 ? 
+            deliveryCalculation.recommendations : null;
+
         res.status(201).json({
             success: true,
             message: responseMessage,
-            data: populatedOrder
+            data: populatedOrder,
+            deliveryInfo: {
+                vehicleType: deliveryCalculation.vehicleType,
+                vehicleName: deliveryCalculation.vehicleName,
+                totalWeight: deliveryCalculation.totalWeightKg + 'kg',
+                weightUtilization: deliveryCalculation.weightUtilization + '%',
+                distance: deliveryCalculation.distance + 'km',
+                tripsNeeded: deliveryCalculation.tripsNeeded,
+                shippingFee: shippingFee,
+                warnings: deliveryWarnings,
+                recommendations: deliveryRecommendations,
+                breakdown: {
+                    baseFee: deliveryCalculation.breakdown.baseFee,
+                    distanceFee: deliveryCalculation.breakdown.distanceFee,
+                    trips: deliveryCalculation.breakdown.trips
+                }
+            }
         });
 
     } catch (error) {
@@ -600,11 +705,113 @@ const confirmOrderReceived = async (req, res) => {
     }
 };
 
+// Get delivery estimate for cart items
+const getDeliveryEstimate = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { 
+            selectedItems, 
+            deliveryDistance = 5, 
+            selectedVehicle = null 
+        } = req.body;
+
+        // Get user's cart
+        const user = await User.findById(userId)
+            .populate({
+                path: 'cart.product',
+                select: 'productName productCategory productPrice averageWeightPerPiece hasMultipleSizes sizeVariants unit'
+            });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Determine which items to calculate for
+        let itemsToProcess;
+        
+        if (selectedItems && selectedItems.length > 0) {
+            // Use selected items from frontend
+            itemsToProcess = selectedItems;
+        } else {
+            // Use all cart items
+            if (!user.cart || user.cart.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Cart is empty'
+                });
+            }
+            itemsToProcess = user.cart;
+        }
+
+        // Initialize delivery calculator
+        const deliveryCalculator = new DeliveryCalculator();
+
+        // Prepare order products with full product data for weight calculation
+        const orderProducts = [];
+        for (const cartItem of itemsToProcess) {
+            const fullProduct = await Product.findById(cartItem.product._id || cartItem.product)
+                .select('productName productCategory averageWeightPerPiece hasMultipleSizes sizeVariants unit');
+            
+            if (!fullProduct) {
+                continue; // Skip if product not found
+            }
+
+            orderProducts.push({
+                product: fullProduct,
+                quantity: cartItem.quantity,
+                selectedSize: cartItem.selectedSize || null
+            });
+        }
+
+        if (orderProducts.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid products found for delivery calculation'
+            });
+        }
+
+        // Calculate delivery estimates
+        const totalWeight = deliveryCalculator.calculateOrderWeight(orderProducts);
+        const deliveryCalculation = deliveryCalculator.calculateDeliveryCost(
+            totalWeight, 
+            deliveryDistance, 
+            selectedVehicle
+        );
+
+        // Get alternative delivery options
+        const deliveryOptions = deliveryCalculator.getDeliveryOptions(totalWeight, deliveryDistance);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                selectedOption: deliveryCalculation,
+                alternatives: deliveryOptions,
+                orderSummary: {
+                    totalItems: orderProducts.length,
+                    totalWeight: deliveryCalculation.totalWeightKg + 'kg',
+                    distance: deliveryDistance + 'km'
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Get delivery estimate error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error while calculating delivery estimate'
+        });
+    }
+};
+
 module.exports = {
     createOrder,
     getUserOrders,
     getOrderById,
     updateOrderStatus,
     getSellerOrders,
-    confirmOrderReceived
+    confirmOrderReceived,
+    getDeliveryEstimate
 };

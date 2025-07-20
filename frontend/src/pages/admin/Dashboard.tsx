@@ -1,3 +1,4 @@
+
 import AdminLayout from "@/components/admin/AdminLayout";
 import StatsCard from "@/components/admin/StatsCard";
 import RevenueChart from "@/components/admin/charts/RevenueChart";
@@ -146,7 +147,19 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Cards - Responsive Grid with proper spacing */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+          <StatsCard
+            title="Total Sales"
+            value={`₱${stats?.totalSales?.toLocaleString() || '0'}`}
+            description={`₱${stats?.todaySales?.toLocaleString() || '0'} today`}
+            icon={TrendingUp}
+          />
+          <StatsCard
+            title="Platform Revenue"
+            value={`₱${stats?.totalRevenue?.toLocaleString() || '0'}`}
+            description={`₱${stats?.todayRevenue?.toLocaleString() || '0'} today (2%)`}
+            icon={TrendingUp}
+          />
           <StatsCard
             title="Total Users"
             value={stats?.totalUsers?.toLocaleString() || '0'}
@@ -156,7 +169,7 @@ const Dashboard = () => {
           <StatsCard
             title="Orders"
             value={stats?.totalOrders?.toLocaleString() || '0'}
-            description={`${stats?.todayOrders || 0} today`}
+            description={`${stats?.deliveredOrders || 0} delivered`}
             icon={ShoppingCart}
           />
           <StatsCard
@@ -164,12 +177,6 @@ const Dashboard = () => {
             value={stats?.totalProducts?.toLocaleString() || '0'}
             description={`${stats?.lowStockProducts?.length || 0} low stock`}
             icon={Package}
-          />
-          <StatsCard
-            title="Revenue"
-            value={`₱${stats?.totalRevenue?.toLocaleString() || '0'}`}
-            description={`₱${stats?.todayRevenue?.toLocaleString() || '0'} today`}
-            icon={TrendingUp}
           />
         </div>
 

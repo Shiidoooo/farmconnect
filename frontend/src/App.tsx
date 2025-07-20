@@ -28,6 +28,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Community from "./pages/Community";
 import Weather from "./pages/Weather";
+import Map from "./pages/profile/map";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminUsers from "./pages/admin/Users";
 import AdminOrders from "./pages/admin/Orders";
@@ -37,6 +38,7 @@ import AdminMessages from "./pages/admin/Messages";
 import AdminSupport from "./pages/admin/Support";
 import AdminSettings from "./pages/admin/Settings";
 import NotFound from "./pages/NotFound";
+
 
 const queryClient = new QueryClient();
 
@@ -57,6 +59,7 @@ const App = () => (
             <Route path="/contact" element={<Contact />} />
             <Route path="/community" element={<Community />} />
             <Route path="/weather" element={<Weather />} />
+            <Route path="/map" element={<Map />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/order-tracking" element={<OrderTracking />} />

@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Star, ShoppingCart, Clock, User, Heart, Share2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { productsAPI } from "@/services/api";
+import { productsAPI, cartAPI } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface Product {
   _id: string;
@@ -19,6 +20,16 @@ interface Product {
   productStock: number;
   productExpiryDate: string;
   createdAt: string;
+  hasMultipleSizes?: boolean;
+  sizeVariants?: Array<{
+    size: string;
+    price: number;
+    stock: number;
+    wholesalePrice?: number;
+    wholesaleMinQuantity?: number;
+    averageWeightPerPiece?: number;
+  }>;
+  unit?: string;
   user: {
     _id: string;
     name: string;
@@ -43,8 +54,11 @@ interface ProductDetailDialogProps {
 
 const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogProps) => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [addingToCart, setAddingToCart] = useState(false);
   const [sellerStats, setSellerStats] = useState({
     totalProducts: 0,
     averageRating: 0,
@@ -58,7 +72,37 @@ const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogPr
     if (product?.user?._id) {
       fetchSellerStats(product.user._id);
     }
-  }, [product?.user?._id]);
+    // Reset selected size when product changes
+    if (product?.hasMultipleSizes && product?.sizeVariants?.length > 0) {
+      setSelectedSize(product.sizeVariants[0].size);
+    } else {
+      setSelectedSize(null);
+    }
+  }, [product?.user?._id, product?._id]);
+
+  // Helper functions for size variants
+  const getCurrentPrice = () => {
+    if (product?.hasMultipleSizes && product?.sizeVariants?.length > 0 && selectedSize) {
+      const variant = product.sizeVariants.find(v => v.size === selectedSize);
+      return variant ? variant.price : product.productPrice;
+    }
+    return product?.productPrice || 0;
+  };
+
+  const getCurrentStock = () => {
+    if (product?.hasMultipleSizes && product?.sizeVariants?.length > 0 && selectedSize) {
+      const variant = product.sizeVariants.find(v => v.size === selectedSize);
+      return variant ? variant.stock : product.productStock;
+    }
+    return product?.productStock || 0;
+  };
+
+  const getCurrentVariant = () => {
+    if (product?.hasMultipleSizes && product?.sizeVariants?.length > 0 && selectedSize) {
+      return product.sizeVariants.find(v => v.size === selectedSize);
+    }
+    return null;
+  };
 
   const fetchSellerStats = async (sellerId: string) => {
     try {
@@ -76,9 +120,46 @@ const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogPr
 
   if (!product) return null;
 
-  const handleAddToCart = () => {
-    console.log(`Added ${quantity} of ${product.productName} to cart`);
-    onClose();
+  const handleAddToCart = async () => {
+    try {
+      setAddingToCart(true);
+      
+      // For size variants, pass the selected size
+      const sizeToAdd = product.hasMultipleSizes && selectedSize ? selectedSize : undefined;
+      
+      // Calculate the actual price that will be used
+      const variant = getCurrentVariant();
+      const isWholesale = variant?.wholesalePrice && variant?.wholesaleMinQuantity && quantity >= variant.wholesaleMinQuantity;
+      const finalPrice = isWholesale ? variant.wholesalePrice : getCurrentPrice();
+      
+      const response = await cartAPI.addToCart(product._id, quantity, sizeToAdd);
+      
+      if (response.success) {
+        const totalAmount = (finalPrice * quantity).toFixed(2);
+        const priceType = isWholesale ? 'wholesale' : 'regular';
+        
+        toast({
+          title: "Success!",
+          description: `${quantity} x ${product.productName}${sizeToAdd ? ` (Size: ${sizeToAdd.toUpperCase()})` : ''} added to cart at ${priceType} price (₱${totalAmount})`,
+        });
+        onClose();
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to add item to cart",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast({
+        title: "Error",
+        description: "Error adding item to cart",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingToCart(false);
+    }
   };
 
   // Helper function to render stars
@@ -176,9 +257,45 @@ const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogPr
                 </span>
               </div>
               
+              {/* Size Selection for products with multiple sizes */}
+              {product.hasMultipleSizes && product.sizeVariants?.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="font-medium text-gray-800 mb-3">Select Size:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {product.sizeVariants.map((variant) => (
+                      <button
+                        key={variant.size}
+                        onClick={() => setSelectedSize(variant.size)}
+                        className={`px-4 py-2 text-sm rounded-md border transition-colors ${
+                          selectedSize === variant.size
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'
+                        }`}
+                      >
+                        {variant.size.toUpperCase()}
+                        <div className="text-xs mt-1">
+                          ₱{variant.price}
+                          {variant.averageWeightPerPiece && product.unit === 'per_piece' && (
+                            <span className="block">{variant.averageWeightPerPiece}g</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {getCurrentVariant() && (
+                    <div className="text-xs text-gray-600 mt-2">
+                      Selected: {selectedSize?.toUpperCase()}
+                      {getCurrentVariant()?.averageWeightPerPiece && product.unit === 'per_piece' && (
+                        <span className="ml-2">• {getCurrentVariant()?.averageWeightPerPiece}g each</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-4">
-                <span className="text-3xl font-bold text-red-600">₱{product.productPrice}</span>
-                <span className="text-sm text-gray-600">{product.productStock} in stock</span>
+                <span className="text-3xl font-bold text-red-600">₱{getCurrentPrice()}</span>
+                <span className="text-sm text-gray-600">{getCurrentStock()} in stock</span>
               </div>
             </div>
 
@@ -212,30 +329,98 @@ const ProductDetailDialog = ({ product, isOpen, onClose }: ProductDetailDialogPr
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
                 <span className="text-sm font-medium">Quantity:</span>
-                <div className="flex items-center border rounded">
-                  <button
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="px-3 py-1 hover:bg-gray-100"
-                  >
-                    -
-                  </button>
-                  <span className="px-4 py-1 border-x">{quantity}</span>
-                  <button
-                    onClick={() => setQuantity(Math.min(product.productStock, quantity + 1))}
-                    className="px-3 py-1 hover:bg-gray-100"
-                  >
-                    +
-                  </button>
+                <div className="flex items-center space-x-2">
+                  {/* Quantity Controls */}
+                  <div className="flex items-center border rounded">
+                    <button
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="px-3 py-1 hover:bg-gray-100"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 1;
+                        setQuantity(Math.max(1, Math.min(getCurrentStock(), value)));
+                      }}
+                      className="w-16 px-2 py-1 text-center border-x focus:outline-none"
+                      min="1"
+                      max={getCurrentStock()}
+                    />
+                    <button
+                      onClick={() => setQuantity(Math.min(getCurrentStock(), quantity + 1))}
+                      className="px-3 py-1 hover:bg-gray-100"
+                    >
+                      +
+                    </button>
+                  </div>
+                  
+                  {/* Quick quantity buttons */}
+                  <div className="flex space-x-1">
+                    {[10, 25, 50, 100].map((qty) => (
+                      <button
+                        key={qty}
+                        onClick={() => setQuantity(Math.min(getCurrentStock(), qty))}
+                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+                        disabled={qty > getCurrentStock()}
+                      >
+                        {qty}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              </div>
+              
+              {/* Wholesale pricing info */}
+              {getCurrentVariant()?.wholesalePrice && getCurrentVariant()?.wholesaleMinQuantity && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h5 className="text-sm font-medium text-blue-800 mb-1">Wholesale Pricing Available!</h5>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Buy {getCurrentVariant()?.wholesaleMinQuantity}+ items for ₱{getCurrentVariant()?.wholesalePrice} each
+                    (Save ₱{((getCurrentPrice() - (getCurrentVariant()?.wholesalePrice || 0)) * quantity).toFixed(2)} on this order)
+                  </p>
+                  {quantity >= (getCurrentVariant()?.wholesaleMinQuantity || 0) ? (
+                    <p className="text-xs text-green-700 font-medium">
+                      ✓ Wholesale price applied! Total: ₱{((getCurrentVariant()?.wholesalePrice || 0) * quantity).toFixed(2)}
+                    </p>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <p className="text-xs text-blue-700">
+                        Add {(getCurrentVariant()?.wholesaleMinQuantity || 0) - quantity} more for wholesale pricing
+                      </p>
+                      <button
+                        onClick={() => setQuantity(getCurrentVariant()?.wholesaleMinQuantity || quantity)}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Total price display */}
+              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                <span className="font-medium text-gray-800">Total Price:</span>
+                <span className="text-xl font-bold text-red-600">
+                  ₱{(() => {
+                    const variant = getCurrentVariant();
+                    const isWholesale = variant?.wholesalePrice && variant?.wholesaleMinQuantity && quantity >= variant.wholesaleMinQuantity;
+                    const pricePerUnit = isWholesale ? variant.wholesalePrice : getCurrentPrice();
+                    return (pricePerUnit * quantity).toFixed(2);
+                  })()}
+                </span>
               </div>
               
               <Button 
                 onClick={handleAddToCart}
                 className="w-full bg-red-600 hover:bg-red-700 text-white"
-                disabled={product.productStock === 0}
+                disabled={getCurrentStock() === 0 || addingToCart}
               >
                 <ShoppingCart className="w-4 h-4 mr-2" />
-                {product.productStock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                {addingToCart ? 'Adding...' : getCurrentStock() === 0 ? 'Out of Stock' : 'Add to Cart'}
               </Button>
             </div>
 

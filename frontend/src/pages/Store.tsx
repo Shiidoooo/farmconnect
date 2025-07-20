@@ -8,7 +8,8 @@ import ProductDetailDialog from "@/components/ProductDetailDialog";
 import { ShoppingCart, Star, Search, Heart, User, Store as StoreIcon, MapPin, Clock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { productsAPI, authAPI } from "@/services/api";
+import { productsAPI, cartAPI, auth } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Store = () => {
   const { sellerId } = useParams();
@@ -27,8 +28,50 @@ const Store = () => {
   });
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState({});
+  const [selectedSizes, setSelectedSizes] = useState({}); // Track selected size for each product
+  const { toast } = useToast();
 
-  // Helper function to render stars
+  // Helper function to get product price based on selected size
+  const getProductPrice = (product) => {
+    if (product.hasMultipleSizes && product.sizeVariants?.length > 0) {
+      const selectedSize = selectedSizes[product._id];
+      if (selectedSize) {
+        const variant = product.sizeVariants.find(v => v.size === selectedSize);
+        return variant ? variant.price : product.sizeVariants[0].price;
+      }
+      return product.sizeVariants[0].price; // Default to first variant
+    }
+    return product.productPrice;
+  };
+
+  // Helper function to get cheapest price (for display purposes)
+  const getCheapestPrice = (product) => {
+    if (product.hasMultipleSizes && product.sizeVariants?.length > 0) {
+      return Math.min(...product.sizeVariants.map(v => v.price));
+    }
+    return product.productPrice;
+  };
+
+  // Helper function to get product stock based on selected size
+  const getProductStock = (product) => {
+    if (product.hasMultipleSizes && product.sizeVariants?.length > 0) {
+      const selectedSize = selectedSizes[product._id];
+      if (selectedSize) {
+        const variant = product.sizeVariants.find(v => v.size === selectedSize);
+        return variant ? variant.stock : product.sizeVariants[0].stock;
+      }
+      return product.sizeVariants[0].stock; // Default to first variant
+    }
+    return product.productStock;
+  };
+
+  // Handle size selection
+  const handleSizeSelect = (productId, size) => {
+    setSelectedSizes(prev => ({
+      ...prev,
+      [productId]: size
+    }));
+  };
   const renderStars = (rating) => {
     const stars = [];
     const fullStars = Math.floor(rating);
@@ -114,14 +157,60 @@ const Store = () => {
     }
   };
 
-  const handleAddToCart = (e, productId) => {
+  const handleAddToCart = async (e, product) => {
     e.stopPropagation();
-    setAddingToCart(productId);
     
-    setTimeout(() => {
+    // Check if user is authenticated
+    if (!auth.isAuthenticated()) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to add items to cart",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For products with multiple sizes, require size selection
+    if (product.hasMultipleSizes && product.sizeVariants?.length > 0) {
+      const selectedSize = selectedSizes[product._id];
+      if (!selectedSize) {
+        toast({
+          title: "Size selection required",
+          description: "Please select a size before adding to cart",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setAddingToCart(product._id);
+    
+    try {
+      const selectedSize = selectedSizes[product._id];
+      const response = await cartAPI.addToCart(product._id, 1, selectedSize);
+      
+      if (response.success) {
+        toast({
+          title: "Added to cart",
+          description: `${product.productName}${selectedSize ? ` (${selectedSize.toUpperCase()})` : ''} has been added to your cart`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to add item to cart",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add item to cart",
+        variant: "destructive",
+      });
+    } finally {
       setAddingToCart(null);
-      console.log(`Added product ${productId} to cart`);
-    }, 1000);
+    }
   };
 
   const toggleFavorite = (e, productId) => {
@@ -307,10 +396,51 @@ const Store = () => {
                     
                     <p className="text-xs text-gray-500 mb-2 overflow-hidden" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{product.productDescription}</p>
                     
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-lg font-bold text-red-600">₱{product.productPrice}</span>
-                      <span className="text-xs text-gray-500">{product.productStock} in stock</span>
-                    </div>
+                    {/* Size variants for products with multiple sizes */}
+                    {product.hasMultipleSizes && product.sizeVariants?.length > 0 ? (
+                      <div className="mb-3">
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {product.sizeVariants.map((variant) => (
+                            <button
+                              key={variant.size}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSizeSelect(product._id, variant.size);
+                              }}
+                              className={`px-2 py-1 text-xs border rounded ${
+                                selectedSizes[product._id] === variant.size
+                                  ? 'border-red-600 bg-red-50 text-red-600'
+                                  : 'border-gray-300 hover:border-red-600'
+                              }`}
+                            >
+                              {variant.size.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-bold text-red-600">
+                            ₱{selectedSizes[product._id] ? 
+                              product.sizeVariants.find(v => v.size === selectedSizes[product._id])?.price || getCheapestPrice(product)
+                              : getCheapestPrice(product)
+                            }
+                            {!selectedSizes[product._id] && (
+                              <span className="text-xs text-gray-500 ml-1">from</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {selectedSizes[product._id] ? 
+                              product.sizeVariants.find(v => v.size === selectedSizes[product._id])?.stock || 0
+                              : getProductStock(product)
+                            } in stock
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-lg font-bold text-red-600">₱{product.productPrice}</span>
+                        <span className="text-xs text-gray-500">{product.productStock} in stock</span>
+                      </div>
+                    )}
                     
                     {/* Rating display */}
                     <div className="flex items-center justify-between mb-3">
@@ -351,11 +481,11 @@ const Store = () => {
                         className={`w-full bg-red-600 hover:bg-red-700 text-white text-xs py-2 transition-all duration-300 transform ${
                           addingToCart === product._id ? 'scale-95 bg-green-600 animate-pulse' : 'hover:scale-105'
                         }`}
-                        onClick={(e) => handleAddToCart(e, product._id)}
-                        disabled={addingToCart === product._id || product.productStock === 0}
+                        onClick={(e) => handleAddToCart(e, product)}
+                        disabled={addingToCart === product._id || getProductStock(product) === 0}
                       >
                         <ShoppingCart className={`w-4 h-4 mr-2 ${addingToCart === product._id ? 'animate-bounce' : ''}`} />
-                        {addingToCart === product._id ? 'Adding...' : product.productStock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                        {addingToCart === product._id ? 'Adding...' : getProductStock(product) === 0 ? 'Out of Stock' : 'Add to Cart'}
                       </Button>
                     </div>
                   </CardContent>

@@ -5,3 +5,4 @@ export { default as AddressesSection } from './AddressesSection';
 export { default as ChangePasswordSection } from './ChangePasswordSection';
 export { default as PurchaseSection } from './PurchaseSection';
 export { default as ProfileSidebar } from './ProfileSidebar';
+export { default as Reports } from './Reports';

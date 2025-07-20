@@ -7,11 +7,15 @@ const {
     getOrderById, 
     updateOrderStatus,
     getSellerOrders,
-    confirmOrderReceived
+    confirmOrderReceived,
+    getDeliveryEstimate
 } = require('../controllers/orderController');
 
 // Create new order
 router.post('/', authenticateUser, createOrder);
+
+// Get delivery estimate
+router.post('/delivery-estimate', authenticateUser, getDeliveryEstimate);
 
 // Get user's orders
 router.get('/my-orders', authenticateUser, getUserOrders);

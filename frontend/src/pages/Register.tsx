@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import AddressMapSelector from '@/components/AddressMapSelector';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -18,12 +19,20 @@ const Register = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    address: '',
     phone_number: '',
     password: '',
     confirmPassword: '',
     gender: '',
     dateOfBirth: ''
+  });
+  const [addressData, setAddressData] = useState({
+    city: '',
+    barangay: '',
+    street: '',
+    landmark: '',
+    latitude: 14.5995,
+    longitude: 120.9842,
+    locationComment: ''
   });
   const [profilePicture, setProfilePicture] = useState(null);
   const [profilePicturePreview, setProfilePicturePreview] = useState('');
@@ -84,11 +93,21 @@ const Register = () => {
     }
   };
 
+  const handleAddressChange = (address: typeof addressData) => {
+    setAddressData(address);
+  };
+
   const validateForm = () => {
-    if (!formData.name || !formData.email || !formData.address || 
-        !formData.phone_number || !formData.password || !formData.gender ||
-        !formData.dateOfBirth) {
-      setError('Please fill in all fields');
+    if (!formData.name || !formData.email || !formData.phone_number || 
+        !formData.password || !formData.gender || !formData.dateOfBirth) {
+      setError('Please fill in all personal information fields');
+      return false;
+    }
+
+    // Validate address data
+    if (!addressData.city || !addressData.barangay || !addressData.street || 
+        !addressData.landmark) {
+      setError('Please complete all address fields including landmark');
       return false;
     }
 
@@ -148,9 +167,21 @@ const Register = () => {
 
       // Prepare data for API - use FormData only if there's a file
       const { confirmPassword, ...registerData } = formData;
-      const dataWithRole = {
+      
+      // Combine form data with address data
+      const completeUserData = {
         ...registerData,
-        role: 'user'
+        role: 'user',
+        // Create full address string for compatibility
+        address: `${addressData.street}, ${addressData.barangay}, ${addressData.city}`,
+        // Include detailed address fields
+        city: addressData.city,
+        barangay: addressData.barangay,
+        street: addressData.street,
+        landmark: addressData.landmark,
+        latitude: addressData.latitude,
+        longitude: addressData.longitude,
+        locationComment: addressData.locationComment
       };
 
       let requestData;
@@ -161,10 +192,10 @@ const Register = () => {
         const formDataToSend = new FormData();
         
         // Append all form fields
-        Object.keys(dataWithRole).forEach(key => {
-          const value = dataWithRole[key as keyof typeof dataWithRole];
+        Object.keys(completeUserData).forEach(key => {
+          const value = completeUserData[key as keyof typeof completeUserData];
           console.log(`Adding to FormData: ${key} = ${value}`);
-          formDataToSend.append(key, value);
+          formDataToSend.append(key, value?.toString() || '');
         });
         
         // Add profile picture
@@ -185,7 +216,7 @@ const Register = () => {
       } else {
         // Use regular JSON when no file
         console.log('Using JSON because no profile picture selected');
-        requestData = dataWithRole;
+        requestData = completeUserData;
       }
       
       // Debug: Check data type
@@ -231,9 +262,12 @@ const Register = () => {
       console.log('Form data being sent:', {
         name: formData.name,
         email: formData.email,
-        address: formData.address,
         phone_number: formData.phone_number,
         gender: formData.gender,
+        address: `${addressData.street}, ${addressData.barangay}, ${addressData.city}`,
+        landmark: addressData.landmark,
+        locationComment: addressData.locationComment,
+        coordinates: `${addressData.latitude}, ${addressData.longitude}`,
         hasProfilePicture: !!profilePicture,
         profilePictureSize: profilePicture?.size,
         profilePictureType: profilePicture?.type
@@ -246,8 +280,8 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-red-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-red-100 flex items-center justify-center p-4 py-8">
+      <div className="w-full max-w-4xl"> {/* Increased from max-w-md to max-w-4xl */}
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
@@ -276,234 +310,232 @@ const Register = () => {
               </Alert>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium text-gray-700">
-                  Full Name
-                </Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="Enter your full name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Profile Picture */}
-              <div className="space-y-2">
-                <Label htmlFor="profilePicture" className="text-sm font-medium text-gray-700">
-                  Profile Picture (Optional)
-                </Label>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Personal Information Section */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Personal Information</h3>
                 
-                {profilePicturePreview ? (
+                {/* Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium text-gray-700">
+                    Full Name
+                  </Label>
                   <div className="relative">
-                    <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-gray-300">
-                      <img
-                        src={profilePicturePreview}
-                        alt="Profile preview"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={removeProfilePicture}
-                      className="absolute top-0 right-1/2 transform translate-x-10 -translate-y-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                    <p className="text-xs text-gray-500 text-center mt-2">
-                      Click the X to remove image
-                    </p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <div className="flex items-center justify-center w-full">
-                      <label
-                        htmlFor="profilePicture"
-                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <Upload className="w-8 h-8 mb-2 text-gray-400" />
-                          <p className="mb-2 text-sm text-gray-500">
-                            <span className="font-semibold">Click to upload</span> profile picture
-                          </p>
-                          <p className="text-xs text-gray-500">PNG, JPG, JPEG or WebP (MAX. 5MB)</p>
-                        </div>
-                      </label>
-                    </div>
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
-                      id="profilePicture"
-                      name="profilePicture"
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      onChange={handleFileChange}
-                      className="hidden"
+                      id="name"
+                      name="name"
+                      type="text"
+                      placeholder="Enter your full name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
+                      required
                     />
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                  Email Address
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
+                {/* Profile Picture */}
+                <div className="space-y-2">
+                  <Label htmlFor="profilePicture" className="text-sm font-medium text-gray-700">
+                    Profile Picture (Optional)
+                  </Label>
+                  
+                  {profilePicturePreview ? (
+                    <div className="relative">
+                      <div className="w-24 h-24 mx-auto rounded-full overflow-hidden border-2 border-gray-300">
+                        <img
+                          src={profilePicturePreview}
+                          alt="Profile preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeProfilePicture}
+                        className="absolute top-0 right-1/2 transform translate-x-10 -translate-y-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      <p className="text-xs text-gray-500 text-center mt-2">
+                        Click the X to remove image
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="flex items-center justify-center w-full">
+                        <label
+                          htmlFor="profilePicture"
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                            <p className="mb-2 text-sm text-gray-500">
+                              <span className="font-semibold">Click to upload</span> profile picture
+                            </p>
+                            <p className="text-xs text-gray-500">PNG, JPG, JPEG or WebP (MAX. 5MB)</p>
+                          </div>
+                        </label>
+                      </div>
+                      <Input
+                        id="profilePicture"
+                        name="profilePicture"
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                    Email Address
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Phone Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="phone_number" className="text-sm font-medium text-gray-700">
+                    Phone Number
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="phone_number"
+                      name="phone_number"
+                      type="tel"
+                      placeholder="Enter your phone number"
+                      value={formData.phone_number}
+                      onChange={handleChange}
+                      className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Gender */}
+                  <div className="space-y-2">
+                    <Label htmlFor="gender" className="text-sm font-medium text-gray-700">
+                      Gender
+                    </Label>
+                    <Select onValueChange={(value) => handleSelectChange('gender', value)}>
+                      <SelectTrigger className="border-gray-300 focus:border-red-500 focus:ring-red-500">
+                        <SelectValue placeholder="Select your gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="prefer not to say">Prefer not to say</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Date of Birth */}
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                      Date of Birth
+                    </Label>
+                    <Input
+                      id="dateOfBirth"
+                      name="dateOfBirth"
+                      type="date"
+                      value={formData.dateOfBirth}
+                      onChange={handleChange}
+                      max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                      className="border-gray-300 focus:border-red-500 focus:ring-red-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Password */}
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                      Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        id="password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Create a password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="pl-10 pr-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+                      Confirm Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Confirm your password"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        className="pl-10 pr-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Address */}
+              {/* Address Section */}
               <div className="space-y-2">
-                <Label htmlFor="address" className="text-sm font-medium text-gray-700">
-                  Address
-                </Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="address"
-                    name="address"
-                    type="text"
-                    placeholder="Enter your address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Phone Number */}
-              <div className="space-y-2">
-                <Label htmlFor="phone_number" className="text-sm font-medium text-gray-700">
-                  Phone Number
-                </Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="phone_number"
-                    name="phone_number"
-                    type="tel"
-                    placeholder="Enter your phone number"
-                    value={formData.phone_number}
-                    onChange={handleChange}
-                    className="pl-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Gender */}
-              <div className="space-y-2">
-                <Label htmlFor="gender" className="text-sm font-medium text-gray-700">
-                  Gender
-                </Label>
-                <Select onValueChange={(value) => handleSelectChange('gender', value)}>
-                  <SelectTrigger className="border-gray-300 focus:border-red-500 focus:ring-red-500">
-                    <SelectValue placeholder="Select your gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="prefer not to say">Prefer not to say</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Date of Birth */}
-              <div className="space-y-2">
-                <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 flex items-center">
-                  <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                  Date of Birth
-                </Label>
-                <Input
-                  id="dateOfBirth"
-                  name="dateOfBirth"
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={handleChange}
-                  max={new Date().toISOString().split('T')[0]} // Prevent future dates
-                  className="border-gray-300 focus:border-red-500 focus:ring-red-500"
-                  required
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Address & Location</h3>
+                <AddressMapSelector 
+                  onAddressChange={handleAddressChange}
+                  initialAddress={addressData}
                 />
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Create a password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="pl-10 pr-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirm Password */}
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
-                  Confirm Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm your password"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="pl-10 pr-10 border-gray-300 focus:border-red-500 focus:ring-red-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
               </div>
 
               {/* Submit Button */}
               <Button
                 type="submit"
-                className="w-full bg-red-600 hover:bg-red-700 text-white py-2 mt-6"
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 mt-8 text-lg"
                 disabled={loading}
               >
                 {loading ? 'Creating Account...' : 'Create Account'}

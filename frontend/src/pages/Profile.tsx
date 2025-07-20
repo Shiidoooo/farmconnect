@@ -10,7 +10,8 @@ import {
   AddressesSection,
   ChangePasswordSection,
   PurchaseSection,
-  ProfileSidebar
+  ProfileSidebar,
+  Reports
 } from "./profile/index";
 import MySalesSection from "./profile/MySalesSection";
 
@@ -45,6 +46,8 @@ const Profile = () => {
         return <PurchaseSection />;
       case 'my-sales':
         return <MySalesSection />;
+      case 'reports':
+        return <Reports />;
       default:
         return <ProfileSection />;
     }

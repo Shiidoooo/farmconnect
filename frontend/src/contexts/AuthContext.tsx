@@ -6,6 +6,22 @@ interface User {
   name: string;
   email: string;
   address: string;
+  addresses?: Array<{
+    id: number;
+    type: 'Home' | 'Office';
+    fullName: string;
+    phone: string;
+    city: string;
+    barangay: string;
+    street: string;
+    landmark?: string;
+    coordinates?: {
+      lat: number;
+      lng: number;
+    };
+    locationComment?: string;
+    isDefault: boolean;
+  }>;
   phone_number: string;
   role: string;
   gender: 'male' | 'female' | 'prefer not to say';

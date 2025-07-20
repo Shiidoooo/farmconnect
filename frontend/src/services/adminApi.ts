@@ -206,14 +206,26 @@ export const adminApiService = new AdminApiService();
 
 // Export types for better TypeScript support
 export interface DashboardStats {
+  // Sales metrics (customer spending from delivered orders)
+  totalSales: number;
+  todaySales: number;
+  weeklySales: number;
+  monthlySales: number;
+  
+  // Revenue metrics (2% commission from delivered orders)
   totalRevenue: number;
-  totalOrders: number;
-  totalUsers: number;
-  totalProducts: number;
   todayRevenue: number;
-  todayOrders: number;
   weeklyRevenue: number;
   monthlyRevenue: number;
+  
+  // Order metrics
+  totalOrders: number;
+  deliveredOrders: number;
+  todayOrders: number;
+  
+  // Other metrics
+  totalUsers: number;
+  totalProducts: number;
   averageOrderValue: number;
   recentOrders: any[];
   lowStockProducts: any[];

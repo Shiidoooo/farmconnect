@@ -23,7 +23,11 @@ const {
     getCart,
     updateCartItem,
     removeFromCart,
-    clearCart
+    clearCart,
+    getUserAddresses,
+    addUserAddress,
+    updateUserAddress,
+    deleteUserAddress
 } = require('../controllers/userController');
 const {
     authenticateUser,
@@ -83,6 +87,12 @@ router.get('/cart', authenticateUser, getCart);
 router.put('/cart/update', authenticateUser, updateCartItem);
 router.delete('/cart/remove/:productId', authenticateUser, removeFromCart);
 router.delete('/cart/clear', authenticateUser, clearCart);
+
+// Address routes
+router.get('/addresses', authenticateUser, getUserAddresses);
+router.post('/addresses', authenticateUser, addUserAddress);
+router.put('/addresses/:addressId', authenticateUser, updateUserAddress);
+router.delete('/addresses/:addressId', authenticateUser, deleteUserAddress);
 
 // Public route for creating e-wallet accounts (for demo purposes)
 router.post('/wallet/create-account', createEwalletAccount);

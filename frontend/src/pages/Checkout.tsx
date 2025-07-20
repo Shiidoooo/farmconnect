@@ -1,9 +1,11 @@
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
+import CheckoutRouteMap from "@/components/CheckoutRouteMap";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +18,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { orderAPI, walletAPI, auth } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import { calculateShipping, formatShippingDetails, type CartItem, type ShippingCalculation } from "@/utils/shippingCalculator";
 
 interface PaymentMethod {
   type: string;
@@ -35,9 +38,12 @@ const Checkout = () => {
   const [shippingAddress, setShippingAddress] = useState({
     fullName: "",
     phoneNumber: "",
-    address: "",
-    city: ""
+    address: ""
   });
+  const [buyerLocation, setBuyerLocation] = useState<any>(null);
+  const [sellerLocations, setSellerLocations] = useState<any[]>([]);
+  const [shippingCalculations, setShippingCalculations] = useState<ShippingCalculation[]>([]);
+  const [totalShippingCost, setTotalShippingCost] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -66,8 +72,77 @@ const Checkout = () => {
       try {
         setLoading(true);
         
+        // Check if all items are from the same seller
+        const sellerIds = selectedItems.map(item => item.product?.user?._id || item.product?.user);
+        const uniqueSellerIds = [...new Set(sellerIds)];
+        
+        if (uniqueSellerIds.length > 1) {
+          toast({
+            title: "Multiple sellers detected",
+            description: "You can only checkout items from one seller at a time. Please remove items from other sellers and try again.",
+            variant: "destructive",
+          });
+          navigate('/cart');
+          return;
+        }
+
         // Set the selected cart items
         setCartItems(selectedItems);
+
+        // Process buyer and seller locations
+        const userData = auth.getUserData();
+        if (userData) {
+          setShippingAddress({
+            fullName: userData.name || "",
+            phoneNumber: userData.phone_number || "",
+            address: userData.address || ""
+          });
+
+          // Set buyer location (assuming user has addresses with coordinates)
+          if (userData.addresses && userData.addresses.length > 0) {
+            const defaultAddress = userData.addresses.find(addr => addr.isDefault) || userData.addresses[0];
+            setBuyerLocation({
+              lat: defaultAddress.coordinates?.lat || 14.5995, // Default to Manila if no coordinates
+              lng: defaultAddress.coordinates?.lng || 120.9842,
+              address: `${defaultAddress.street}, ${defaultAddress.barangay}, ${defaultAddress.city}`,
+              name: userData.name
+            });
+          } else {
+            // Fallback: Use Manila coordinates if no address
+            setBuyerLocation({
+              lat: 14.5995,
+              lng: 120.9842,
+              address: userData.address || 'Manila, Philippines',
+              name: userData.name
+            });
+          }
+        }
+
+        // Group items by seller and create seller locations
+        const sellersMap = new Map();
+        selectedItems.forEach(item => {
+          const sellerId = item.product?.user?._id || item.product?.user;
+          const sellerName = item.product?.user?.name || 'Unknown Seller';
+          
+          // For demo purposes, assign random coordinates around Metro Manila for sellers
+          // In a real app, you would get actual seller addresses from the database
+          const sellerLat = 14.5995 + (Math.random() - 0.5) * 0.1; // Random within ~5km
+          const sellerLng = 120.9842 + (Math.random() - 0.5) * 0.1;
+
+          if (sellersMap.has(sellerId)) {
+            sellersMap.get(sellerId).items.push(item);
+          } else {
+            sellersMap.set(sellerId, {
+              lat: sellerLat,
+              lng: sellerLng,
+              address: `${sellerName}'s Location, Metro Manila`, // Placeholder address
+              name: sellerName,
+              items: [item]
+            });
+          }
+        });
+
+        setSellerLocations(Array.from(sellersMap.values()));
 
         // Fetch user's linked ewallets
         try {
@@ -96,8 +171,42 @@ const Checkout = () => {
     initializeCheckout();
   }, [navigate, location.state, toast]);
 
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.product.productPrice * item.quantity), 0);
-  const shipping = 5.00; // Fixed shipping fee for now
+  // Handle route calculations and shipping cost updates
+  const handleRoutesCalculated = (routes: Array<{
+    seller: any;
+    distance: number;
+    duration: number;
+    coordinates: [number, number][];
+  }>) => {
+    const calculations: ShippingCalculation[] = [];
+    let totalCost = 0;
+
+    routes.forEach(route => {
+      // Get items for this specific seller
+      const sellerItems = route.seller.items as CartItem[];
+      const distanceInKm = route.distance / 1000; // Convert meters to kilometers
+      
+      // Calculate shipping for this seller's items
+      const calculation = calculateShipping(sellerItems, distanceInKm);
+      calculations.push(calculation);
+      totalCost += calculation.totalShippingCost;
+    });
+
+    setShippingCalculations(calculations);
+    setTotalShippingCost(totalCost);
+  };
+
+  // Helper function to get the price of a cart item (considering size variants)
+  const getItemPrice = (item: any) => {
+    if (item.product?.hasMultipleSizes && item.product?.sizeVariants?.length > 0 && item.selectedSize) {
+      const variant = item.product.sizeVariants.find((v: any) => v.size === item.selectedSize);
+      return variant ? variant.price : item.product.productPrice || 0;
+    }
+    return item.product?.productPrice || 0;
+  };
+
+  const subtotal = cartItems.reduce((sum, item) => sum + (getItemPrice(item) * item.quantity), 0);
+  const shipping = totalShippingCost || 0; // Use calculated shipping cost
   const total = subtotal + shipping;
 
   const handleAddressChange = (field: string, value: string) => {
@@ -128,7 +237,7 @@ const Checkout = () => {
 
   const validateForm = () => {
     if (!shippingAddress.fullName || !shippingAddress.phoneNumber || 
-        !shippingAddress.address || !shippingAddress.city) {
+        !shippingAddress.address) {
       toast({
         title: "Incomplete address",
         description: "Please fill in all shipping address fields",
@@ -246,21 +355,14 @@ const Checkout = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="address">Street Address</Label>
-                    <Input
+                    <Label htmlFor="address">Complete Address</Label>
+                    <Textarea
                       id="address"
                       value={shippingAddress.address}
                       onChange={(e) => handleAddressChange('address', e.target.value)}
-                      placeholder="Enter your street address"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input
-                      id="city"
-                      value={shippingAddress.city}
-                      onChange={(e) => handleAddressChange('city', e.target.value)}
-                      placeholder="Enter your city"
+                      placeholder="Enter your complete address (street, barangay, city, province)"
+                      className="min-h-[80px] resize-none"
+                      rows={3}
                     />
                   </div>
                 </div>
@@ -325,6 +427,26 @@ const Checkout = () => {
                 </RadioGroup>
               </CardContent>
             </Card>
+
+            {/* Delivery Route Map */}
+            {buyerLocation && sellerLocations.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-lg font-semibold flex items-center mb-4">
+                    <MapPin className="w-5 h-5 mr-2 text-blue-600" />
+                    Delivery Route
+                  </h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    View the route from your location to the seller(s). Green marker is your location, red markers are seller locations.
+                  </p>
+                  <CheckoutRouteMap
+                    buyerLocation={buyerLocation}
+                    sellerLocations={sellerLocations}
+                    onRoutesCalculated={handleRoutesCalculated}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Order Summary */}
@@ -343,7 +465,7 @@ const Checkout = () => {
                 {/* Order Items */}
                 <div className="space-y-3 mb-4">
                   {cartItems.map((item) => (
-                    <div key={item._id} className="flex items-center space-x-3">
+                    <div key={`${item.product._id}-${item.selectedSize || 'no-size'}`} className="flex items-center space-x-3">
                       <img 
                         src={item.product.productimage && item.product.productimage.length > 0 ? 
                              item.product.productimage[0].url : "/placeholder.svg"}
@@ -352,9 +474,14 @@ const Checkout = () => {
                       />
                       <div className="flex-1">
                         <p className="font-medium text-sm">{item.product.productName}</p>
-                        <p className="text-xs text-gray-600">Qty: {item.quantity}</p>
+                        <div className="text-xs text-gray-600">
+                          <span>Qty: {item.quantity}</span>
+                          {item.selectedSize && (
+                            <span className="ml-2">Size: {item.selectedSize.toUpperCase()}</span>
+                          )}
+                        </div>
                       </div>
-                      <span className="font-medium">₱{(item.product.productPrice * item.quantity).toFixed(2)}</span>
+                      <span className="font-medium">₱{(getItemPrice(item) * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>

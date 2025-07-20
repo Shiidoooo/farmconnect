@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { orderAPI, auth } from "@/services/api";
+import { orderAPI, auth, productsAPI } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
+import ProductRatingDialog from "@/components/ProductRatingDialog";
 
 const OrderTracking = () => {
   const { orderId } = useParams();
@@ -26,6 +27,12 @@ const OrderTracking = () => {
   const { toast } = useToast();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [ratingDialog, setRatingDialog] = useState({
+    isOpen: false,
+    product: null,
+    orderId: null
+  });
+  const [orderRatings, setOrderRatings] = useState([]);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -73,6 +80,48 @@ const OrderTracking = () => {
 
     fetchOrder();
   }, [orderId, navigate]);
+
+  // Load rating status for delivered orders
+  useEffect(() => {
+    const loadOrderRatings = async () => {
+      if (order && order.status === 'delivered' && orderId) {
+        try {
+          const response = await productsAPI.checkOrderRatings(orderId);
+          if (response.success) {
+            setOrderRatings(response.data.products);
+          }
+        } catch (error) {
+          console.error('Error loading ratings:', error);
+        }
+      }
+    };
+
+    loadOrderRatings();
+  }, [order, orderId]);
+
+  // Handle rating a product
+  const handleRateProduct = (product) => {
+    setRatingDialog({
+      isOpen: true,
+      product: product,
+      orderId: orderId
+    });
+  };
+
+  // Handle rating submission
+  const handleRatingSubmitted = async () => {
+    // Reload order ratings to reflect the new rating
+    if (orderId) {
+      try {
+        const response = await productsAPI.checkOrderRatings(orderId);
+        if (response.success) {
+          setOrderRatings(response.data.products);
+        }
+      } catch (error) {
+        console.error('Error reloading ratings:', error);
+      }
+    }
+  };
 
   const getOrderStatusSteps = (status) => {
     const baseSteps = [
@@ -282,21 +331,56 @@ const OrderTracking = () => {
           <CardContent className="p-6">
             <h3 className="font-semibold mb-4">Order Items</h3>
             <div className="space-y-3 mb-4">
-              {order.products.map((item) => (
-                <div key={item._id} className="flex items-center space-x-3">
-                  <img 
-                    src={item.product.productimage && item.product.productimage.length > 0 ? 
-                         item.product.productimage[0].url : "/placeholder.svg"}
-                    alt={item.product.productName}
-                    className="w-12 h-12 object-cover rounded"
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{item.product.productName}</p>
-                    <p className="text-xs text-gray-600">Qty: {item.quantity}</p>
+              {order.products.map((item) => {
+                const productRating = orderRatings.find(
+                  p => p.productId === item.product._id
+                );
+                const hasRated = productRating?.hasRated || false;
+                
+                return (
+                  <div key={item._id} className="flex items-center space-x-3 border rounded-lg p-3">
+                    <img 
+                      src={item.product.productimage && item.product.productimage.length > 0 ? 
+                           item.product.productimage[0].url : "/placeholder.svg"}
+                      alt={item.product.productName}
+                      className="w-16 h-16 object-cover rounded"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium">{item.product.productName}</p>
+                      <div className="text-sm text-gray-600">
+                        <span>Qty: {item.quantity}</span>
+                        {item.selectedSize && (
+                          <span className="ml-2">• Size: {item.selectedSize.toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <span className="font-medium text-red-600">₱{(item.price * item.quantity).toFixed(2)}</span>
+                        {order.status === 'delivered' && (
+                          <Button
+                            size="sm"
+                            variant={hasRated ? "secondary" : "outline"}
+                            className="text-xs"
+                            onClick={() => handleRateProduct(item.product)}
+                            disabled={hasRated}
+                          >
+                            {hasRated ? (
+                              <>
+                                <Star className="w-3 h-3 mr-1 fill-yellow-400 text-yellow-400" />
+                                Rated
+                              </>
+                            ) : (
+                              <>
+                                <Star className="w-3 h-3 mr-1" />
+                                Rate & Review
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <span className="font-medium text-red-600">₱{(item.price * item.quantity).toFixed(2)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
             
             {/* Order Summary */}
@@ -336,6 +420,15 @@ const OrderTracking = () => {
           </Card>
         )}
       </div>
+
+      {/* Product Rating Dialog */}
+      <ProductRatingDialog
+        isOpen={ratingDialog.isOpen}
+        onOpenChange={(open) => setRatingDialog({ ...ratingDialog, isOpen: open })}
+        product={ratingDialog.product}
+        orderId={ratingDialog.orderId}
+        onRatingSubmitted={handleRatingSubmitted}
+      />
 
       <Footer />
     </div>

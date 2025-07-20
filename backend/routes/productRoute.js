@@ -27,4 +27,10 @@ router.delete('/:id', productController.deleteProduct);
 // Add rating to product
 router.post('/:id/rating', productController.addRating);
 
+// Add rating to product from a completed order
+router.post('/:id/order-rating', productController.addOrderRating);
+
+// Check if products in an order have been rated
+router.get('/order/:orderId/rating-status', productController.checkOrderProductRatings);
+
 module.exports = router;

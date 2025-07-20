@@ -20,7 +20,15 @@ const registerUser = async (req, res) => {
             password, 
             gender,
             dateOfBirth,
-            role = 'user' 
+            role = 'user',
+            // New detailed address fields
+            city,
+            barangay,
+            street,
+            landmark,
+            latitude,
+            longitude,
+            locationComment
         } = req.body;
 
         // Validation
@@ -113,7 +121,15 @@ const registerUser = async (req, res) => {
             gender,
             dateOfBirth: birthDate,
             role,
-            profilePicture
+            profilePicture,
+            // Add new detailed address fields
+            city,
+            barangay,
+            street,
+            landmark,
+            latitude: latitude ? parseFloat(latitude) : undefined,
+            longitude: longitude ? parseFloat(longitude) : undefined,
+            locationComment
         });
 
         await user.save();
@@ -924,7 +940,7 @@ const getEwalletsByType = async (req, res) => {
 // Cart functionality
 const addToCart = async (req, res) => {
     try {
-        const { productId, quantity = 1 } = req.body;
+        const { productId, quantity = 1, selectedSize } = req.body;
         const userId = req.user._id;
 
         // Validate input
@@ -951,20 +967,28 @@ const addToCart = async (req, res) => {
             });
         }
 
-        // Check if product already exists in cart
+        // Check if product already exists in cart with the same size (for size variants)
         const existingCartItem = user.cart.find(item => 
-            item.product.toString() === productId
+            item.product.toString() === productId && 
+            item.selectedSize === selectedSize
         );
 
         if (existingCartItem) {
-            // Update quantity if product already in cart
+            // Update quantity if product with same size already in cart
             existingCartItem.quantity += quantity;
         } else {
             // Add new item to cart
-            user.cart.push({
+            const cartItem = {
                 product: productId,
                 quantity: quantity
-            });
+            };
+            
+            // Add selectedSize only if provided
+            if (selectedSize) {
+                cartItem.selectedSize = selectedSize;
+            }
+            
+            user.cart.push(cartItem);
         }
 
         await user.save();
@@ -990,7 +1014,7 @@ const getCart = async (req, res) => {
 
         const user = await User.findById(userId).populate({
             path: 'cart.product',
-            select: 'productName productPrice productimage productCategory user',
+            select: 'productName productPrice productimage productCategory hasMultipleSizes sizeVariants unit user',
             populate: {
                 path: 'user',
                 select: 'name email'
@@ -1182,6 +1206,232 @@ const updateProfilePicture = async (req, res) => {
     }
 };
 
+// Get user addresses
+const getUserAddresses = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Return addresses array or convert current address to array format
+        const addresses = user.addresses || [{
+            id: 1,
+            type: 'Home',
+            fullName: user.name,
+            phone: user.phone_number,
+            city: user.city || '',
+            barangay: user.barangay || '',
+            street: user.street || '',
+            landmark: user.landmark || '',
+            coordinates: user.latitude && user.longitude ? {
+                lat: user.latitude,
+                lng: user.longitude
+            } : null,
+            locationComment: user.locationComment || '',
+            isDefault: true
+        }];
+
+        res.status(200).json({
+            success: true,
+            addresses
+        });
+    } catch (error) {
+        console.error('Get addresses error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error getting addresses'
+        });
+    }
+};
+
+// Add new address
+const addUserAddress = async (req, res) => {
+    try {
+        const { 
+            type, 
+            fullName, 
+            phone, 
+            city, 
+            barangay, 
+            street, 
+            landmark, 
+            coordinates, 
+            locationComment 
+        } = req.body;
+
+        const user = await User.findById(req.user.userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // If this is the first address or no addresses exist, update the user's main address
+        if (!user.addresses || user.addresses.length === 0) {
+            user.city = city;
+            user.barangay = barangay;
+            user.street = street;
+            user.landmark = landmark;
+            user.latitude = coordinates?.lat;
+            user.longitude = coordinates?.lng;
+            user.locationComment = locationComment;
+            
+            // Initialize addresses array
+            user.addresses = [{
+                id: 1,
+                type,
+                fullName,
+                phone,
+                city,
+                barangay,
+                street,
+                landmark,
+                coordinates,
+                locationComment,
+                isDefault: true
+            }];
+        } else {
+            // Add new address to the array
+            const newAddress = {
+                id: user.addresses.length + 1,
+                type,
+                fullName,
+                phone,
+                city,
+                barangay,
+                street,
+                landmark,
+                coordinates,
+                locationComment,
+                isDefault: false
+            };
+            user.addresses.push(newAddress);
+        }
+
+        await user.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Address added successfully'
+        });
+    } catch (error) {
+        console.error('Add address error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error adding address'
+        });
+    }
+};
+
+// Update address
+const updateUserAddress = async (req, res) => {
+    try {
+        const { addressId } = req.params;
+        const updateData = req.body;
+
+        const user = await User.findById(req.user.userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Find and update the address
+        if (user.addresses) {
+            const addressIndex = user.addresses.findIndex(addr => addr.id == addressId);
+            if (addressIndex !== -1) {
+                user.addresses[addressIndex] = { ...user.addresses[addressIndex], ...updateData };
+                
+                // If this is the default address, update user's main address fields
+                if (user.addresses[addressIndex].isDefault) {
+                    user.city = updateData.city;
+                    user.barangay = updateData.barangay;
+                    user.street = updateData.street;
+                    user.landmark = updateData.landmark;
+                    user.latitude = updateData.coordinates?.lat;
+                    user.longitude = updateData.coordinates?.lng;
+                    user.locationComment = updateData.locationComment;
+                }
+                
+                await user.save();
+                
+                return res.status(200).json({
+                    success: true,
+                    message: 'Address updated successfully'
+                });
+            }
+        }
+
+        res.status(404).json({
+            success: false,
+            message: 'Address not found'
+        });
+    } catch (error) {
+        console.error('Update address error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error updating address'
+        });
+    }
+};
+
+// Delete address
+const deleteUserAddress = async (req, res) => {
+    try {
+        const { addressId } = req.params;
+
+        const user = await User.findById(req.user.userId);
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        if (user.addresses) {
+            const addressIndex = user.addresses.findIndex(addr => addr.id == addressId);
+            if (addressIndex !== -1) {
+                // Don't allow deleting the default address if it's the only one
+                if (user.addresses[addressIndex].isDefault && user.addresses.length === 1) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Cannot delete the only address'
+                    });
+                }
+                
+                user.addresses.splice(addressIndex, 1);
+                await user.save();
+                
+                return res.status(200).json({
+                    success: true,
+                    message: 'Address deleted successfully'
+                });
+            }
+        }
+
+        res.status(404).json({
+            success: false,
+            message: 'Address not found'
+        });
+    } catch (error) {
+        console.error('Delete address error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error deleting address'
+        });
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
@@ -1204,5 +1454,9 @@ module.exports = {
     updateCartItem,
     removeFromCart,
     clearCart,
-    updateProfilePicture
+    updateProfilePicture,
+    getUserAddresses,
+    addUserAddress,
+    updateUserAddress,
+    deleteUserAddress
 };

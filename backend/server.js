@@ -12,6 +12,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const forumRoutes = require('./routes/forumRoutes');
 const weatherRoutes = require('./routes/weatherRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const reportsRoutes = require('./routes/reportsRoutes');
 
 connectDB();
 
@@ -52,6 +53,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/forum', forumRoutes);
 app.use('/api/weather', weatherRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/reports', reportsRoutes);
 
 const PORT = process.env.PORT || 3002;
 

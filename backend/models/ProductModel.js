@@ -14,7 +14,9 @@ const productSchema = new mongoose.Schema({
     },
     productPrice: {
         type: Number,
-        required: true
+        required: function() {
+            return !this.hasMultipleSizes; // Only required if NOT using multiple sizes
+        }
     },
     productimage: [
     {
@@ -34,8 +36,100 @@ const productSchema = new mongoose.Schema({
     },
     productStock: {
         type: Number,
-        required: true,
+        required: function() {
+            return !this.hasMultipleSizes; // Only required if NOT using multiple sizes
+        },
         default: 0
+    },
+    // New fields for enhanced product management
+    sellingType: {
+        type: String,
+        required: true,
+        enum: ['retail', 'wholesale', 'both'],
+        default: 'retail'
+    },
+    unit: {
+        type: String,
+        required: true,
+        enum: ['per_piece', 'per_kilo', 'per_gram', 'per_pound', 'per_bundle', 'per_pack'],
+        default: 'per_piece'
+    },
+    averageWeightPerPiece: {
+        type: Number, // in grams
+        required: function() {
+            // Only required/relevant if unit is per_piece and NOT using multiple sizes
+            return this.unit === 'per_piece' && !this.hasMultipleSizes;
+        },
+        default: null,
+        validate: {
+            validator: function(value) {
+                // Only validate if unit is per_piece
+                if (this.unit !== 'per_piece') {
+                    return true; // Skip validation for non-per_piece units
+                }
+                return value == null || value > 0; // Allow null or positive values
+            },
+            message: 'Average weight per piece must be positive when unit is per_piece'
+        }
+    },
+    size: {
+        type: String,
+        enum: ['xs', 's', 'm', 'l', 'xl', 'xxl', 'mixed', 'none', null],
+        default: 'none'
+    },
+    // Multiple size variants with different prices
+    sizeVariants: [{
+        size: {
+            type: String,
+            enum: ['xs', 's', 'm', 'l', 'xl', 'xxl', 'mixed'],
+            required: true
+        },
+        price: {
+            type: Number,
+            required: true,
+            min: 0
+        },
+        stock: {
+            type: Number,
+            required: true,
+            min: 0,
+            default: 0
+        },
+        wholesalePrice: {
+            type: Number,
+            default: null
+        },
+        wholesaleMinQuantity: {
+            type: Number,
+            default: null // Minimum quantity for wholesale for this specific size
+        },
+        averageWeightPerPiece: {
+            type: Number, // Weight in grams for this specific size
+            default: null
+        }
+    }],
+    // If true, use sizeVariants instead of single size/price
+    hasMultipleSizes: {
+        type: Boolean,
+        default: false
+    },
+    productStatus: {
+        type: String,
+        required: true,
+        enum: ['available', 'pre_order', 'out_of_stock', 'coming_soon'],
+        default: 'available'
+    },
+    wholesaleMinQuantity: {
+        type: Number,
+        default: null // Minimum quantity for wholesale orders
+    },
+    wholesalePrice: {
+        type: Number,
+        default: null // Different price for wholesale
+    },
+    availableDate: {
+        type: Date,
+        default: null // For pre-order items
     },
     createdAt: {
         type: Date,
@@ -66,6 +160,11 @@ const productSchema = new mongoose.Schema({
                 type: mongoose.Schema.Types.ObjectId,
                 ref: 'User',
                 required: true
+            },
+            orderId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Order',
+                required: true // Required to track which order this rating is for
             },
             rating: {
                 type: Number,

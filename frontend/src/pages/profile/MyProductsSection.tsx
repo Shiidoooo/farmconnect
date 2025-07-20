@@ -27,6 +27,16 @@ const MyProductsSection = () => {
     productStock: "",
     harvestDate: "",
     storageLocation: "room_temp",
+    sellingType: "retail",
+    unit: "per_piece",
+    averageWeightPerPiece: "",
+    size: "none",
+    productStatus: "available",
+    wholesaleMinQuantity: "",
+    wholesalePrice: "",
+    availableDate: "",
+    hasMultipleSizes: false,
+    sizeVariants: [],
     productimage: []
   });
 
@@ -68,6 +78,52 @@ const MyProductsSection = () => {
     }));
   };
 
+  const handleMultipleSizesToggle = (checked) => {
+    setFormData(prev => ({
+      ...prev,
+      hasMultipleSizes: checked,
+      sizeVariants: checked ? [{ 
+        size: 's', 
+        price: '', 
+        stock: '', 
+        wholesalePrice: '', 
+        wholesaleMinQuantity: '',
+        averageWeightPerPiece: ''
+      }] : [],
+      size: checked ? 'none' : prev.size
+    }));
+  };
+
+  const addSizeVariant = () => {
+    setFormData(prev => ({
+      ...prev,
+      sizeVariants: [...prev.sizeVariants, { 
+        size: 's', 
+        price: '', 
+        stock: '', 
+        wholesalePrice: '', 
+        wholesaleMinQuantity: '',
+        averageWeightPerPiece: ''
+      }]
+    }));
+  };
+
+  const removeSizeVariant = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      sizeVariants: prev.sizeVariants.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateSizeVariant = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      sizeVariants: prev.sizeVariants.map((variant, i) => 
+        i === index ? { ...variant, [field]: value } : variant
+      )
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setUploading(true);
@@ -78,11 +134,40 @@ const MyProductsSection = () => {
       // Append all form fields
       formDataToSend.append('productName', formData.productName);
       formDataToSend.append('productDescription', formData.productDescription);
-      formDataToSend.append('productPrice', formData.productPrice);
+      
+      // Only append price and stock if not using multiple sizes
+      if (!formData.hasMultipleSizes) {
+        formDataToSend.append('productPrice', formData.productPrice);
+        formDataToSend.append('productStock', formData.productStock);
+      } else {
+        // Set default values for multiple sizes
+        formDataToSend.append('productPrice', '0');
+        formDataToSend.append('productStock', '0');
+      }
+      
       formDataToSend.append('productCategory', formData.productCategory);
-      formDataToSend.append('productStock', formData.productStock);
       formDataToSend.append('harvestDate', formData.harvestDate);
       formDataToSend.append('storageLocation', formData.storageLocation);
+      formDataToSend.append('sellingType', formData.sellingType);
+      formDataToSend.append('unit', formData.unit);
+      
+      // Only send averageWeightPerPiece if unit is per_piece and NOT using multiple sizes
+      if (formData.averageWeightPerPiece && formData.unit === 'per_piece' && !formData.hasMultipleSizes) {
+        formDataToSend.append('averageWeightPerPiece', formData.averageWeightPerPiece);
+      }
+      
+      // Handle size variants
+      formDataToSend.append('hasMultipleSizes', formData.hasMultipleSizes.toString());
+      if (formData.hasMultipleSizes && formData.sizeVariants.length > 0) {
+        formDataToSend.append('sizeVariants', JSON.stringify(formData.sizeVariants));
+      } else if (formData.size && formData.size !== 'none') {
+        formDataToSend.append('size', formData.size);
+      }
+      
+      formDataToSend.append('productStatus', formData.productStatus);
+      if (formData.wholesaleMinQuantity) formDataToSend.append('wholesaleMinQuantity', formData.wholesaleMinQuantity);
+      if (formData.wholesalePrice) formDataToSend.append('wholesalePrice', formData.wholesalePrice);
+      if (formData.availableDate) formDataToSend.append('availableDate', formData.availableDate);
       
       // Append images
       formData.productimage.forEach((file) => {
@@ -168,6 +253,23 @@ const MyProductsSection = () => {
       productStock: product.productStock.toString(),
       harvestDate: product.harvestDate ? product.harvestDate.split('T')[0] : "",
       storageLocation: product.storageLocation || "room_temp",
+      sellingType: product.sellingType || "retail",
+      unit: product.unit || "per_piece",
+      averageWeightPerPiece: product.averageWeightPerPiece ? product.averageWeightPerPiece.toString() : "",
+      size: product.size || "none",
+      productStatus: product.productStatus || "available",
+      wholesaleMinQuantity: product.wholesaleMinQuantity ? product.wholesaleMinQuantity.toString() : "",
+      wholesalePrice: product.wholesalePrice ? product.wholesalePrice.toString() : "",
+      availableDate: product.availableDate ? product.availableDate.split('T')[0] : "",
+      hasMultipleSizes: product.hasMultipleSizes || false,
+      sizeVariants: product.sizeVariants ? product.sizeVariants.map(variant => ({
+        size: variant.size,
+        price: variant.price.toString(),
+        stock: variant.stock.toString(),
+        wholesalePrice: variant.wholesalePrice ? variant.wholesalePrice.toString() : '',
+        wholesaleMinQuantity: variant.wholesaleMinQuantity ? variant.wholesaleMinQuantity.toString() : '',
+        averageWeightPerPiece: variant.averageWeightPerPiece ? variant.averageWeightPerPiece.toString() : ''
+      })) : [],
       productimage: []
     });
     setIsDialogOpen(true);
@@ -204,6 +306,16 @@ const MyProductsSection = () => {
       productStock: "",
       harvestDate: "",
       storageLocation: "room_temp",
+      sellingType: "retail",
+      unit: "per_piece",
+      averageWeightPerPiece: "",
+      size: "none",
+      productStatus: "available",
+      wholesaleMinQuantity: "",
+      wholesalePrice: "",
+      availableDate: "",
+      hasMultipleSizes: false,
+      sizeVariants: [],
       productimage: []
     });
     setEditingProduct(null);
@@ -346,7 +458,9 @@ const MyProductsSection = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="productPrice">Price (₱)</Label>
+                  <Label htmlFor="productPrice">
+                    Price (₱) {formData.hasMultipleSizes && <span className="text-gray-500 text-sm">(Optional - set in size variants)</span>}
+                  </Label>
                   <Input
                     id="productPrice"
                     name="productPrice"
@@ -354,19 +468,25 @@ const MyProductsSection = () => {
                     step="0.01"
                     value={formData.productPrice}
                     onChange={handleInputChange}
-                    required
+                    required={!formData.hasMultipleSizes}
+                    disabled={formData.hasMultipleSizes}
+                    placeholder={formData.hasMultipleSizes ? "Set in size variants" : "Enter price"}
                   />
                 </div>
                 
                 <div>
-                  <Label htmlFor="productStock">Stock Quantity</Label>
+                  <Label htmlFor="productStock">
+                    Stock Quantity {formData.hasMultipleSizes && <span className="text-gray-500 text-sm">(Optional - set in size variants)</span>}
+                  </Label>
                   <Input
                     id="productStock"
                     name="productStock"
                     type="number"
                     value={formData.productStock}
                     onChange={handleInputChange}
-                    required
+                    required={!formData.hasMultipleSizes}
+                    disabled={formData.hasMultipleSizes}
+                    placeholder={formData.hasMultipleSizes ? "Set in size variants" : "Enter stock"}
                   />
                 </div>
               </div>
@@ -397,6 +517,311 @@ const MyProductsSection = () => {
                       <SelectItem value="room_temp">Room Temperature</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* New selling options section */}
+              <div className="bg-gray-50 border rounded-lg p-4 space-y-4">
+                <h4 className="font-medium text-gray-800">Selling Options</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="sellingType">Selling Type</Label>
+                    <Select value={formData.sellingType} onValueChange={(value) => setFormData(prev => ({ ...prev, sellingType: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select selling type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="retail">Retail Only</SelectItem>
+                        <SelectItem value="wholesale">Wholesale Only</SelectItem>
+                        <SelectItem value="both">Both Retail & Wholesale</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="unit">Unit of Sale</Label>
+                    <Select value={formData.unit} onValueChange={(value) => setFormData(prev => ({ ...prev, unit: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="per_piece">Per Piece</SelectItem>
+                        <SelectItem value="per_kilo">Per Kilo</SelectItem>
+                        <SelectItem value="per_gram">Per Gram</SelectItem>
+                        <SelectItem value="per_pound">Per Pound</SelectItem>
+                        <SelectItem value="per_bundle">Per Bundle</SelectItem>
+                        <SelectItem value="per_pack">Per Pack</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {formData.unit === 'per_piece' && (
+                    <div>
+                      <Label htmlFor="averageWeightPerPiece">
+                        Average Weight per Piece (grams)
+                        {formData.hasMultipleSizes && (
+                          <span className="text-sm text-gray-500 ml-1">(Set in size variants)</span>
+                        )}
+                      </Label>
+                      <Input
+                        id="averageWeightPerPiece"
+                        name="averageWeightPerPiece"
+                        type="number"
+                        step="0.1"
+                        value={formData.averageWeightPerPiece}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 150"
+                        disabled={formData.hasMultipleSizes}
+                      />
+                    </div>
+                  )}
+                  
+                  <div>
+                    <div className="flex items-center space-x-2 mb-3">
+                      <input
+                        type="checkbox"
+                        id="hasMultipleSizes"
+                        checked={formData.hasMultipleSizes}
+                        onChange={(e) => handleMultipleSizesToggle(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <Label htmlFor="hasMultipleSizes" className="font-medium">
+                        This product has multiple sizes with different prices
+                      </Label>
+                    </div>
+                    
+                    {!formData.hasMultipleSizes ? (
+                      <div>
+                        <Label htmlFor="size">Size (Optional)</Label>
+                        <Select value={formData.size || "none"} onValueChange={(value) => setFormData(prev => ({ ...prev, size: value === "none" ? "" : value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select size" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No specific size</SelectItem>
+                            <SelectItem value="xs">Extra Small (XS)</SelectItem>
+                            <SelectItem value="s">Small (S)</SelectItem>
+                            <SelectItem value="m">Medium (M)</SelectItem>
+                            <SelectItem value="l">Large (L)</SelectItem>
+                            <SelectItem value="xl">Extra Large (XL)</SelectItem>
+                            <SelectItem value="xxl">XXL</SelectItem>
+                            <SelectItem value="mixed">Mixed Sizes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="font-medium">Size Variants</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addSizeVariant}
+                            className="flex items-center space-x-1"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>Add Size</span>
+                          </Button>
+                        </div>
+                        
+                        {formData.sizeVariants.map((variant, index) => (
+                          <div key={index} className="p-4 border rounded-lg bg-white space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-medium text-sm">Size Variant {index + 1}</h5>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => removeSizeVariant(index)}
+                                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                disabled={formData.sizeVariants.length === 1}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            
+                            <div className={`grid gap-3 ${formData.unit === 'per_piece' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                              <div>
+                                <Label className="text-xs">Size</Label>
+                                <Select
+                                  value={variant.size}
+                                  onValueChange={(value) => updateSizeVariant(index, 'size', value)}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="xs">XS</SelectItem>
+                                    <SelectItem value="s">S</SelectItem>
+                                    <SelectItem value="m">M</SelectItem>
+                                    <SelectItem value="l">L</SelectItem>
+                                    <SelectItem value="xl">XL</SelectItem>
+                                    <SelectItem value="xxl">XXL</SelectItem>
+                                    <SelectItem value="mixed">Mixed</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs">Retail Price (₱)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={variant.price}
+                                  onChange={(e) => updateSizeVariant(index, 'price', e.target.value)}
+                                  placeholder="0.00"
+                                  className="h-8"
+                                  required
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label className="text-xs">Stock</Label>
+                                <Input
+                                  type="number"
+                                  value={variant.stock}
+                                  onChange={(e) => updateSizeVariant(index, 'stock', e.target.value)}
+                                  placeholder="0"
+                                  className="h-8"
+                                  required
+                                />
+                              </div>
+                              
+                              {formData.unit === 'per_piece' && (
+                                <div>
+                                  <Label className="text-xs">Weight per piece (g)</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={variant.averageWeightPerPiece}
+                                    onChange={(e) => updateSizeVariant(index, 'averageWeightPerPiece', e.target.value)}
+                                    placeholder="e.g., 50"
+                                    className="h-8"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            
+                            {(formData.sellingType === 'wholesale' || formData.sellingType === 'both') && (
+                              <div className="grid grid-cols-2 gap-3 border-t pt-3">
+                                <div>
+                                  <Label className="text-xs">Wholesale Price (₱)</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={variant.wholesalePrice}
+                                    onChange={(e) => updateSizeVariant(index, 'wholesalePrice', e.target.value)}
+                                    placeholder="0.00"
+                                    className="h-8"
+                                  />
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-xs">Wholesale Min Qty</Label>
+                                  <Input
+                                    type="number"
+                                    value={variant.wholesaleMinQuantity}
+                                    onChange={(e) => updateSizeVariant(index, 'wholesaleMinQuantity', e.target.value)}
+                                    placeholder="e.g., 20"
+                                    className="h-8"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {formData.sizeVariants.length === 0 && (
+                          <p className="text-sm text-gray-500 italic">
+                            Click "Add Size" to create size variants with different prices
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {(formData.sellingType === 'wholesale' || formData.sellingType === 'both') && (
+                  <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                    <div>
+                      <Label htmlFor="wholesaleMinQuantity">
+                        Wholesale Min Quantity
+                        {formData.hasMultipleSizes && (
+                          <span className="text-sm text-gray-500 ml-1">(Set in size variants)</span>
+                        )}
+                      </Label>
+                      <Input
+                        id="wholesaleMinQuantity"
+                        name="wholesaleMinQuantity"
+                        type="number"
+                        value={formData.wholesaleMinQuantity}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 50"
+                        disabled={formData.hasMultipleSizes}
+                        required={(formData.sellingType === 'wholesale' || formData.sellingType === 'both') && !formData.hasMultipleSizes}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="wholesalePrice">
+                        Wholesale Price (₱)
+                        {formData.hasMultipleSizes && (
+                          <span className="text-sm text-gray-500 ml-1">(Set in size variants)</span>
+                        )}
+                      </Label>
+                      <Input
+                        id="wholesalePrice"
+                        name="wholesalePrice"
+                        type="number"
+                        step="0.01"
+                        value={formData.wholesalePrice}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 45.00"
+                        disabled={formData.hasMultipleSizes}
+                        required={(formData.sellingType === 'wholesale' || formData.sellingType === 'both') && !formData.hasMultipleSizes}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Product status section */}
+              <div className="bg-gray-50 border rounded-lg p-4 space-y-4">
+                <h4 className="font-medium text-gray-800">Product Status</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="productStatus">Availability Status</Label>
+                    <Select value={formData.productStatus} onValueChange={(value) => setFormData(prev => ({ ...prev, productStatus: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available">Available Now</SelectItem>
+                        <SelectItem value="pre_order">Pre-order</SelectItem>
+                        <SelectItem value="out_of_stock">Out of Stock</SelectItem>
+                        <SelectItem value="coming_soon">Coming Soon</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {formData.productStatus === 'pre_order' && (
+                    <div>
+                      <Label htmlFor="availableDate">Available Date</Label>
+                      <Input
+                        id="availableDate"
+                        name="availableDate"
+                        type="date"
+                        value={formData.availableDate}
+                        onChange={handleInputChange}
+                        required={formData.productStatus === 'pre_order'}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -567,14 +992,32 @@ const MyProductsSection = () => {
                       {product.productDescription}
                     </p>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
                       <div className="flex items-center space-x-2">
                         <DollarSign className="w-4 h-4 text-green-600" />
                         <div>
-                          <p className="text-sm text-gray-500">Price</p>
-                          <p className="font-semibold text-green-600">
-                            {formatPrice(product.productPrice)}
+                          <p className="text-sm text-gray-500">
+                            {product.hasMultipleSizes ? 'Price Range' : 'Price'}
                           </p>
+                          {product.hasMultipleSizes && product.sizeVariants?.length > 0 ? (
+                            <div>
+                              <p className="font-semibold text-green-600">
+                                {formatPrice(Math.min(...product.sizeVariants.map(v => v.price)))} - {formatPrice(Math.max(...product.sizeVariants.map(v => v.price)))}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {product.sizeVariants.length} size{product.sizeVariants.length > 1 ? 's' : ''} available
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="font-semibold text-green-600">
+                              {formatPrice(product.productPrice)}
+                              {product.sellingType && (
+                                <span className="text-xs block text-gray-500 capitalize">
+                                  {product.sellingType === 'both' ? 'Retail & Wholesale' : product.sellingType}
+                                </span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -582,9 +1025,82 @@ const MyProductsSection = () => {
                         <Package className="w-4 h-4 text-blue-600" />
                         <div>
                           <p className="text-sm text-gray-500">Stock</p>
-                          <p className="font-semibold">{product.productStock}</p>
+                          {product.hasMultipleSizes && product.sizeVariants?.length > 0 ? (
+                            <div>
+                              <p className="font-semibold">
+                                {product.sizeVariants.reduce((total, variant) => total + (variant.stock || 0), 0)} total
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Across {product.sizeVariants.length} size{product.sizeVariants.length > 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="font-semibold">
+                              {product.productStock}
+                              {product.unit && (
+                                <span className="text-xs block text-gray-500">
+                                  {product.unit.replace('_', ' ')}
+                                </span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </div>
+
+                      {/* Size information - enhanced for multiple sizes */}
+                      {product.hasMultipleSizes && product.sizeVariants?.length > 0 ? (
+                        <div className="flex items-start space-x-2">
+                          <Package className="w-4 h-4 text-teal-600 mt-1" />
+                          <div>
+                            <p className="text-sm text-gray-500">Available Sizes</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {product.sizeVariants.map((variant, index) => (
+                                <Badge 
+                                  key={index} 
+                                  variant="outline" 
+                                  className={`text-xs px-2 py-1 ${
+                                    (variant.stock || 0) > 0 
+                                      ? 'border-green-500 text-green-700 bg-green-50' 
+                                      : 'border-red-500 text-red-700 bg-red-50'
+                                  }`}
+                                >
+                                  {variant.size.toUpperCase()}
+                                  <span className="ml-1 text-xs">
+                                    (₱{variant.price}, {variant.stock || 0} left)
+                                  </span>
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : product.size && product.size !== 'none' ? (
+                        <div className="flex items-center space-x-2">
+                          <Package className="w-4 h-4 text-teal-600" />
+                          <div>
+                            <p className="text-sm text-gray-500">Size</p>
+                            <p className="font-semibold uppercase">
+                              {product.size === 'mixed' ? 'Mixed' : product.size}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {product.productStatus && product.productStatus !== 'available' && (
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-amber-600" />
+                          <div>
+                            <p className="text-sm text-gray-500">Status</p>
+                            <p className="font-semibold capitalize">
+                              {product.productStatus.replace('_', ' ')}
+                              {product.availableDate && product.productStatus === 'pre_order' && (
+                                <span className="text-xs block text-gray-500">
+                                  Available: {formatDate(product.availableDate)}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex items-center space-x-2">
                         <Calendar className="w-4 h-4 text-purple-600" />
@@ -628,6 +1144,23 @@ const MyProductsSection = () => {
                         </div>
                       </div>
 
+                      {(product.sellingType === 'wholesale' || product.sellingType === 'both') && product.wholesalePrice && (
+                        <div className="flex items-center space-x-2">
+                          <DollarSign className="w-4 h-4 text-emerald-600" />
+                          <div>
+                            <p className="text-sm text-gray-500">Wholesale</p>
+                            <p className="font-semibold text-emerald-600">
+                              {formatPrice(product.wholesalePrice)}
+                              {product.wholesaleMinQuantity && (
+                                <span className="text-xs block text-gray-500">
+                                  Min: {product.wholesaleMinQuantity}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <p className="text-sm text-gray-500">Created</p>
                         <p className="font-semibold">
@@ -635,6 +1168,43 @@ const MyProductsSection = () => {
                         </p>
                       </div>
                     </div>
+
+                    {/* Size Variants Display */}
+                    {product.hasMultipleSizes && product.sizeVariants?.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+                          <Package className="w-4 h-4 mr-1" />
+                          Size Variants ({product.sizeVariants.length})
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {product.sizeVariants.map((variant, index) => (
+                            <div key={index} className="bg-gray-50 rounded-lg p-3 border">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-1 rounded uppercase">
+                                    {variant.size}
+                                  </span>
+                                  <p className="font-semibold text-green-600 mt-1">
+                                    {formatPrice(variant.price)}
+                                  </p>
+                                  {variant.wholesalePrice && (
+                                    <p className="text-xs text-emerald-600">
+                                      Wholesale: {formatPrice(variant.wholesalePrice)}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-medium text-gray-600">
+                                    {variant.stock} {product.unit?.replace('per_', '') || 'units'}
+                                  </p>
+                                  <p className="text-xs text-gray-500">in stock</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

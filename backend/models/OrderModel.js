@@ -21,6 +21,10 @@ const OrderSchema = new mongoose.Schema({
         price: {
             type: Number,
             required: true
+        },
+        selectedSize: {
+            type: String,
+            required: false // Optional for products without size variants
         }
     }],
     subtotal: {
@@ -47,7 +51,7 @@ const OrderSchema = new mongoose.Schema({
             },
             city: {
                 type: String,
-                required: true
+                required: false // Made optional since address is now complete
             }
         },
         courier: {
@@ -57,6 +61,61 @@ const OrderSchema = new mongoose.Schema({
             },
             trackingNumber: {
                 type: String
+            }
+        },
+        deliveryDetails: {
+            vehicleType: {
+                type: String,
+                enum: ['motorcycle', 'sedan', 'small_truck', 'medium_truck', 'large_truck', 'extra_large_7t', 'extra_large_12t'],
+                default: 'motorcycle'
+            },
+            vehicleName: {
+                type: String,
+                default: 'Motorcycle'
+            },
+            totalWeight: {
+                type: Number, // Weight in grams
+                default: 0
+            },
+            totalWeightKg: {
+                type: String, // Formatted weight display
+                default: '0kg'
+            },
+            distance: {
+                type: Number, // Distance in kilometers
+                default: 5
+            },
+            tripsNeeded: {
+                type: Number,
+                default: 1
+            },
+            warnings: [{
+                type: String
+            }],
+            recommendations: [{
+                type: String
+            }],
+            weightUtilization: {
+                type: String,
+                default: '0%'
+            },
+            breakdown: {
+                baseFee: {
+                    type: Number,
+                    default: 0
+                },
+                distanceFee: {
+                    type: Number,
+                    default: 0
+                },
+                trips: {
+                    type: Number,
+                    default: 1
+                },
+                multiplier: {
+                    type: Number,
+                    default: 1
+                }
             }
         }
     },
