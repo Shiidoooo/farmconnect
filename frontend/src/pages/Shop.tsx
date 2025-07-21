@@ -18,7 +18,7 @@ const Shop = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [addingToCart, setAddingToCart] = useState(null);
-  const [selectedCategories, setSelectedCategories] = useState(new Set(["fruits"]));
+  const [selectedCategories, setSelectedCategories] = useState(new Set()); // Show all categories by default
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState({});
